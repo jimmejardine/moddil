@@ -114,7 +114,8 @@ L)
 **P21. GPU kernels** (`crates/gpu`, `mods/gpu`, `core::gpu`; L)
 - Closures kept in values, `dyn` and text in a kernel; a slice of the CPU's memory (a `Vec`
   field of its parameters), crossing as a buffer of its own.
-- A kernel's traps (overflow, a failed `?!`) checked on the GPU; `int` 64 bits there, not 32.
+- A GPU trap that names the instance (the tile) it was in: traps are sites with a fixed message,
+  so that needs a trap with a message made when it happens.
 - `Tile` recognised by its type, not its name (E0221), and generic over its pixel and size.
 - `scope`'s `s.launch`, so `launch` need not wait for the GPU.
 

@@ -433,7 +433,7 @@ impl Machine<'_> {
                 }
                 self.stack.static_ref(EMPTY).expect("just set")
             }
-            "gpu_dispatch" => Value::Bool(false),
+            "gpu_dispatch" => Value::Int(0),
             "gpu_show" => Value::Unit,
             "gpu_frame" => {
                 if let Value::Ref(p, _) = &values[0] {

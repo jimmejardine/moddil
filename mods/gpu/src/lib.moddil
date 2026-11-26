@@ -112,8 +112,10 @@ impl Image {
 /// simulator).
 pub trait Gpu {
     /// Runs kernel `source` (WGSL) with `params` over an image the size of `image`: shows it on
-    /// the screen if `show`, and reads its pixels back into `image` if `read`. Whether it could.
-    fn run(&self, source: &str, params: &[u8], image: &mut Image, show: bool, read: bool) -> bool with suspend;
+    /// the screen if `show`, and reads its pixels back into `image` if `read`: 0 if it could not
+    /// (and nothing ran), 1 if it ran, and `k + 2` if a check of the kernel failed there, its
+    /// site `k` (`gpu.trap.1`).
+    fn run(&self, source: &str, params: &[u8], image: &mut Image, show: bool, read: bool) -> int with suspend;
 
     /// Shows `image`, drawn on the CPU, on the screen, where there is one.
     fn show(&self, image: &Image) with suspend;
@@ -123,8 +125,8 @@ pub trait Gpu {
 pub struct Simulator {}
 
 impl Gpu for Simulator {
-    fn run(&self, source: &str, params: &[u8], image: &mut Image, show: bool, read: bool) -> bool with suspend {
-        false
+    fn run(&self, source: &str, params: &[u8], image: &mut Image, show: bool, read: bool) -> int with suspend {
+        0
     }
 
     fn show(&self, image: &Image) with suspend {}
@@ -147,7 +149,7 @@ const SHOW: int = 1;
 const READ: int = 2;
 
 impl Gpu for GpuRoot {
-    fn run(&self, source: &str, params: &[u8], image: &mut Image, show: bool, read: bool) -> bool with suspend {
+    fn run(&self, source: &str, params: &[u8], image: &mut Image, show: bool, read: bool) -> int with suspend {
         let mode = (if show { SHOW } else { 0 }) + (if read { READ } else { 0 });
         sys::dispatch(source, params, image.width, image.height, image.pixels.as_mut_slice(), mode)
     }
@@ -159,9 +161,15 @@ impl Gpu for GpuRoot {
 
 /// Runs `kernel` (a function marked `#[kernel]`) over `image`, one instance per 8 x 8 tile, each
 /// given `params` and its tile: on the GPU if there is one, else on the CPU simulator. It returns
-/// once every instance has run: the image is drawn.
+/// once every instance has run: the image is drawn. A check that fails in an instance on the GPU
+/// (an overflow, an index out of bounds, a failed `?!`) traps here, as the same check does on the
+/// CPU (`gpu.trap.1`).
 pub fn launch<P, K: Fn(&P, &mut Tile)>(kernel: K, params: &P, image: &mut Image) with gpu: Gpu, suspend {
-    if gpu.run(sys::source(&kernel), sys::bytes(params), image, false, true) {
+    let ran = gpu.run(sys::source(&kernel), sys::bytes(params), image, false, true);
+    if ran >= 2 {
+        sys::trap(&kernel, ran - 2);
+    }
+    if ran == 1 {
         return;
     }
     simulate(kernel, params, image);
@@ -171,7 +179,11 @@ pub fn launch<P, K: Fn(&P, &mut Tile)>(kernel: K, params: &P, image: &mut Image)
 /// straight to the screen, with no copy back (`image` is left as it was); without one, drawn on
 /// the CPU simulator into `image`, then shown.
 pub fn present<P, K: Fn(&P, &mut Tile)>(kernel: K, params: &P, image: &mut Image) with gpu: Gpu, suspend {
-    if gpu.run(sys::source(&kernel), sys::bytes(params), image, true, false) {
+    let ran = gpu.run(sys::source(&kernel), sys::bytes(params), image, true, false);
+    if ran >= 2 {
+        sys::trap(&kernel, ran - 2);
+    }
+    if ran == 1 {
         return;
     }
     simulate(kernel, params, image);

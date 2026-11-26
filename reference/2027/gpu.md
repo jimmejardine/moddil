@@ -25,15 +25,27 @@ error (E0221) at the kernel or at the statement it is in, reported when the prog
 **gpu.1** `core::gpu` runs kernels. `source(&k)` is the WGSL of kernel `k` (named as a value), made
 when the program is compiled; `bytes(&v)` is a value's bytes, in Moddil's own layout, which the
 WGSL reads its parameters in; `dispatch(source, params, width, height, out, mode)` runs a kernel
-over a `width` by `height` image, a workgroup per 8 x 8 tile, and gives whether it could (it
-suspends until it has). `mode` is the sum of what to do with the image: 1 shows it in the page
+over a `width` by `height` image, a workgroup per 8 x 8 tile (it suspends until it has), and gives
+0 if it could not, 1 if it ran, and `k + 2` if one of the kernel's checks, its site `k`, failed
+(**gpu.trap.1**); `trap(&k, site)` traps as that check does. `mode` is the sum of what to do with the image: 1 shows it in the page
 (on the GPU, with no copy back), 2 reads its pixels (RGBA8, red lowest, row by row) back into
 `out`. `show(pixels, width, height)` shows an image the CPU drew. `frame(out)` waits for the next
 animation frame and writes its 8 words: the microseconds since the last one, the window's width
 and height, the keys held, the mouse's and the wheel's movement since, and 1 if the program is to
 stop. A run of `main` in a browser has the GPU (WebGPU) and the window; elsewhere a dispatch gives
-false, `show` does nothing, and a frame asks to stop. On the GPU, `int` is 32 bits wide, and a
-kernel's traps (overflow, a failed `?!`) are not checked.
+0, `show` does nothing, and a frame asks to stop.
+
+**gpu.int.1** On the GPU a kernel's values are as on the CPU: `int` is 64 bits, though WGSL has
+none, held as two words (`core::gpu::WideInt`) and each operation on it done by `core::gpu`'s
+function for it, which is ordinary Moddil and gives what the operation gives on the CPU, its
+overflow included. The sized numbers a GPU has are its own (`i32`, `u32`, `f32`), their overflow
+checked as on the CPU.
+
+**gpu.trap.1** A kernel's checks (an overflow, a division by zero, an index out of bounds, a failed
+`?!`, `unreachable`) are made on the GPU as on the CPU. One that fails stops its instance, and
+`gpu::launch` (or `present`) traps there, on the CPU, as the check does: of its kind, at its place
+in the kernel's source. If several instances trap, it is one of them. The image is then as the
+instances that ran drew it.
 
 **gpu.cap.1** A mod names `core::gpu` only if its manifest lists the `os` capability (E0220), as for
 `core::os` (**os.cap.1**).

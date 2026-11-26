@@ -993,7 +993,7 @@ pub unsafe extern "C" fn gpu_dispatch(
     op: *mut u32,
     on: u64,
     mode: u64,
-) -> u8 {
+) -> u64 {
     if !with(|s| s.sched.os().is_some()) {
         return 0;
     }
@@ -1005,7 +1005,7 @@ pub unsafe extern "C" fn gpu_dispatch(
             std::slice::from_raw_parts_mut(op, on as usize),
         )
     };
-    u8::from(crate::os::gpu_dispatch(
+    u64::from(crate::os::gpu_dispatch(
         source,
         params,
         width as i64,

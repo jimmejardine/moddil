@@ -20,7 +20,7 @@ test "a test has no GPU and no window" {
     // The kernel's WGSL is made by a compiler with a GPU back end; a test never dispatches it.
     let params = Params { n: 1 };
     let mut out: [u32; 4] = [0; 4];
-    gpu::dispatch(gpu::source(&draws), gpu::bytes(&params), 2, 2, &mut out, 3)  // => false
+    gpu::dispatch(gpu::source(&draws), gpu::bytes(&params), 2, 2, &mut out, 3)  // => 0
     ;
     // Nothing to show it on: `show` does nothing.
     gpu::show(&out, 2, 2);

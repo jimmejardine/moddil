@@ -10,19 +10,23 @@
 //!   calls, with concrete type arguments, become naga functions. Their control flow is rebuilt as
 //!   `if` and `loop` (`structure`); a body whose shape does not fit is a loop over a switch on
 //!   its current block, which is structured whatever the MIR's control flow.
-//! - **Values:** `int` is `i32` (WGSL has no 64-bit integers), `f32` and `bool` themselves, `u8`
-//!   to `u32` as `u32`; structs and tuples are structs, an enum a struct of its tag and every
+//! - **Values:** `int` is 64 bits, as on the CPU: WGSL has no 64-bit integers, so it is
+//!   `core::gpu::WideInt`, its two words, and each operation on it a call of that module's
+//!   functions for it (`gpu.int.1`); `f32` and `bool` are themselves, `i8` to `i32` an `i32`, `u8`
+//!   to `u32` a `u32`; structs and tuples are structs, an enum a struct of its tag and every
 //!   variant's fields; an array an array; a borrow is the value it borrows (kernel code only reads
 //!   through shared borrows), and the tile (`&mut Tile`) is its position.
 //! - **Slices:** every array in a kernel is the kernel's own or part of its parameters, so a
 //!   slice is the array it is part of (its capacity: found from where the slice is made, and a
 //!   function taking slices is lowered for each capacity it is given), where in it the slice
 //!   starts, and how long it is.
-//! - **Traps are not checked** on the GPU (the MIR's `Assert`s are dropped), and an error edge is
-//!   never taken: interim limits.
+//! - **Traps** are checked as on the CPU (`gpu.trap.1`): a failed check writes its site (one more
+//!   than its index in the sites [`wgsl_sites`] gives) to the trap word, `@binding(3)` (the
+//!   greatest, if several instances trap), and the instance stops: each call is followed by a
+//!   return if the callee trapped. The host reads the word back and traps there, on the CPU.
 //! - **Bindings:** the parameters (`@binding(0)`, words in Moddil's own layout, which the
-//!   generated code reads), the image's pixels (`@binding(1)`, packed RGBA8 row by row), and its
-//!   width and height (`@binding(2)`).
+//!   generated code reads), the image's pixels (`@binding(1)`, packed RGBA8 row by row), its
+//!   width and height (`@binding(2)`), and the trap word (`@binding(3)`).
 
 mod structure;
 
@@ -32,7 +36,7 @@ use structure::Exit;
 
 use moddil_mir::{
     AggregateKind, BinOp, Body, Const, Operand, Place, Projection, Rvalue, Statement, Terminator,
-    UnOp,
+    TrapClass, UnOp,
 };
 use moddil_sema::{
     Callee, ClosureTy, Code, Db, Diagnostic, Item, ItemTree, Num, Owner, Program, Solver, Src,
@@ -40,10 +44,10 @@ use moddil_sema::{
 };
 use moddil_syntax::TextRange;
 use naga::{
-    AddressSpace, ArraySize, BinaryOperator, Binding, Block, BuiltIn, EntryPoint, Expression,
-    Function, FunctionArgument, FunctionResult, GlobalVariable, Handle, Literal, LocalVariable,
-    MathFunction, Module, ResourceBinding, Scalar, ScalarKind, ShaderStage, Span, Statement as S,
-    StructMember, SwitchCase, SwitchValue, Type, TypeInner, UnaryOperator,
+    AddressSpace, ArraySize, AtomicFunction, BinaryOperator, Binding, Block, BuiltIn, EntryPoint,
+    Expression, Function, FunctionArgument, FunctionResult, GlobalVariable, Handle, Literal,
+    LocalVariable, MathFunction, Module, ResourceBinding, Scalar, ScalarKind, ShaderStage, Span,
+    Statement as S, StructMember, SwitchCase, SwitchValue, Type, TypeInner, UnaryOperator,
 };
 
 /// The byte offsets of a struct's or tuple's fields, in field order, in Moddil's own layout: what
@@ -83,6 +87,9 @@ fn closure_item(c: &ClosureTy) -> Option<Item> {
     }
 }
 
+/// A check the kernel makes on the GPU: its kind, and its source.
+pub type Site = (TrapClass, Src, TextRange);
+
 /// The WGSL of kernel `kernel` (a function of `program`'s item tree marked `#[kernel]`).
 ///
 /// # Errors
@@ -94,15 +101,31 @@ pub fn wgsl(
     kernel: u32,
     offsets: Offsets<'_>,
 ) -> Result<String, String> {
-    let module = module(db, program, kernel, offsets)?;
+    wgsl_sites(db, program, kernel, offsets).map(|(text, _)| text)
+}
+
+/// As [`wgsl`], with the checks the kernel makes: a trap word of `k + 1` is check `k`'s.
+///
+/// # Errors
+///
+/// As [`wgsl`].
+pub fn wgsl_sites(
+    db: &dyn Db,
+    program: Program,
+    kernel: u32,
+    offsets: Offsets<'_>,
+) -> Result<(String, Vec<Site>), String> {
+    let (module, sites) = lower(db, program, kernel, offsets).map_err(|(why, _)| why)?;
     let info = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),
     )
     .validate(&module)
     .map_err(|e| format!("the kernel's WGSL does not validate: {:?}", e.as_inner()))?;
-    naga::back::wgsl::write_string(&module, &info, naga::back::wgsl::WriterFlags::empty())
-        .map_err(|e| format!("writing the kernel's WGSL: {e}"))
+    let text =
+        naga::back::wgsl::write_string(&module, &info, naga::back::wgsl::WriterFlags::empty())
+            .map_err(|e| format!("writing the kernel's WGSL: {e}"))?;
+    Ok((text, sites))
 }
 
 /// Every kernel of `program`'s files that cannot run on a GPU, with why: what in it lowering
@@ -119,7 +142,7 @@ pub fn check(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
         // The parameters' layout does not matter here: only that they can be read.
         let mut offsets = |t: &Ty| checking_offsets(items, t);
         let (why, at) = match lower(db, program, k as u32, &mut offsets) {
-            Ok(module) => match naga::valid::Validator::new(
+            Ok((module, _)) => match naga::valid::Validator::new(
                 naga::valid::ValidationFlags::all(),
                 naga::valid::Capabilities::empty(),
             )
@@ -175,7 +198,9 @@ pub fn module(
     kernel: u32,
     offsets: Offsets<'_>,
 ) -> Result<Module, String> {
-    lower(db, program, kernel, offsets).map_err(|(why, _)| why)
+    lower(db, program, kernel, offsets)
+        .map(|(m, _)| m)
+        .map_err(|(why, _)| why)
 }
 
 /// As [`module`]; an error also says where in the program it is, if it is in a statement.
@@ -184,7 +209,7 @@ fn lower(
     program: Program,
     kernel: u32,
     offsets: Offsets<'_>,
-) -> Result<Module, (String, At)> {
+) -> Result<(Module, Vec<Site>), (String, At)> {
     let items = moddil_sema::item_tree(db, program);
     let mut l = Lowering {
         db,
@@ -197,10 +222,11 @@ fn lower(
         slices: HashMap::new(),
         globals: None,
         at: None,
+        sites: Vec::new(),
     };
     l.globals = Some(l.globals());
     match l.entry(kernel) {
-        Ok(()) => Ok(l.module),
+        Ok(()) => Ok((l.module, l.sites)),
         Err(why) => Err((why, l.at)),
     }
 }
@@ -213,6 +239,10 @@ struct Globals {
     size: Handle<GlobalVariable>,
     px: Handle<GlobalVariable>,
     py: Handle<GlobalVariable>,
+    /// The trap word: the site of a check that failed, plus one.
+    trap: Handle<GlobalVariable>,
+    /// Whether this instance trapped, so it stops.
+    trapped: Handle<GlobalVariable>,
 }
 
 struct Lowering<'a> {
@@ -231,11 +261,17 @@ struct Lowering<'a> {
     globals: Option<Globals>,
     /// The statement being lowered: where an error is.
     at: At,
+    /// The checks the kernel makes, by their trap word less one.
+    sites: Vec<Site>,
 }
 
 const U: Span = Span::UNDEFINED;
 
 impl Lowering<'_> {
+    fn scalar_ty_u32_handle(&mut self) -> Handle<Type> {
+        self.scalar(Scalar::U32)
+    }
+
     fn scalar(&mut self, s: Scalar) -> Handle<Type> {
         self.module.types.insert(
             Type {
@@ -299,13 +335,86 @@ impl Lowering<'_> {
         };
         let px = private("px");
         let py = private("py");
+        let u = self.scalar(Scalar::U32);
+        let atomic = self.module.types.insert(
+            Type {
+                name: None,
+                inner: TypeInner::Atomic(Scalar::U32),
+            },
+            U,
+        );
+        let _ = u;
+        let words = self.module.types.insert(
+            Type {
+                name: None,
+                inner: TypeInner::Array {
+                    base: atomic,
+                    size: ArraySize::Constant(std::num::NonZeroU32::new(4).expect("4")),
+                    stride: 4,
+                },
+            },
+            U,
+        );
+        let trap = self.module.global_variables.append(
+            GlobalVariable {
+                name: Some("trap".to_string()),
+                space: AddressSpace::Storage {
+                    access: naga::StorageAccess::LOAD | naga::StorageAccess::STORE,
+                },
+                binding: Some(ResourceBinding {
+                    group: 0,
+                    binding: 3,
+                }),
+                ty: words,
+                init: None,
+                memory_decorations: naga::MemoryDecorations::empty(),
+            },
+            U,
+        );
+        let bool_ = self.scalar(Scalar::BOOL);
+        let trapped = self.module.global_variables.append(
+            GlobalVariable {
+                name: Some("trapped".to_string()),
+                space: AddressSpace::Private,
+                binding: None,
+                ty: bool_,
+                init: None,
+                memory_decorations: naga::MemoryDecorations::empty(),
+            },
+            U,
+        );
         Globals {
             params,
             pixels,
             size,
             px,
             py,
+            trap,
+            trapped,
         }
+    }
+
+    /// The prelude's `core::gpu` function `name` (one of `WideInt`'s, `gpu.int.1`).
+    fn wide_fn(&self, name: &str) -> Result<u32, String> {
+        self.items
+            .fns
+            .iter()
+            .position(|f| f.name == name && f.src == Src::Prelude)
+            .map(|f| f as u32)
+            .ok_or_else(|| format!("`core::gpu::{name}`, for `int` in a kernel"))
+    }
+
+    /// The naga type of `int`: `core::gpu::WideInt`, its two words.
+    fn wide_ty(&mut self) -> Result<Handle<Type>, String> {
+        let a = self
+            .items
+            .adts
+            .iter()
+            .position(|a| a.name == "WideInt" && a.src == Src::Prelude)
+            .ok_or("`core::gpu::WideInt`, for `int` in a kernel")?;
+        let t = Ty::Adt(a as u32, "WideInt".into(), std::sync::Arc::from([]));
+        self.ty(&t)?
+            .ok_or_else(|| "a `WideInt` with no value".to_string())
     }
 
     /// `t` with refinements as their bases and borrows as what they borrow: how a kernel holds a
@@ -361,7 +470,7 @@ impl Lowering<'_> {
         let h = match &t {
             // No value; an error set's values are never made, as error edges are not taken.
             Ty::Unit | Ty::Never | Ty::Errors(_) => None,
-            Ty::Int => Some(self.scalar(Scalar::I32)),
+            Ty::Int => Some(self.wide_ty()?),
             Ty::Bool => Some(self.scalar(Scalar::BOOL)),
             Ty::Char => Some(self.scalar(Scalar::U32)),
             Ty::Num(n) => Some(self.scalar(match n {
@@ -372,7 +481,7 @@ impl Lowering<'_> {
             })),
             // The tile: where it is.
             t if self.is_tile(t) => {
-                let i = self.scalar(Scalar::I32);
+                let i = self.wide_ty()?;
                 Some(self.structure("Tile", vec![("x".into(), i), ("y".into(), i)]))
             }
             Ty::Adt(a, ..) if self.items.adts[*a as usize].is_enum => {
@@ -649,12 +758,32 @@ impl Lowering<'_> {
             });
         }
         let tile = self.ty(&tile_ty)?.expect("a tile type");
+        let wide = self.wide_ty()?;
         self.at = None;
         let params = self.decode(&mut f, &param_ty, 0)?;
         let mut e = Exprs::new(&mut f);
+        // The trap word, read once: so every kernel's layout has it, used or not.
+        let base = e.add(Expression::GlobalVariable(g.trap));
+        let word = e.emit(Expression::AccessIndex { base, index: 0 });
+        let seen = e.f.expressions.append(
+            Expression::AtomicResult {
+                ty: self.scalar_ty_u32_handle(),
+                comparison: false,
+            },
+            U,
+        );
+        let nothing = e.add(Expression::Literal(Literal::U32(0)));
+        e.push(S::Atomic {
+            pointer: word,
+            fun: AtomicFunction::Add,
+            value: nothing,
+            result: Some(seen),
+        });
+        let xw = e.wide_of_i32(wide, xi);
+        let yw = e.wide_of_i32(wide, yi);
         let tile = e.emit(Expression::Compose {
             ty: tile,
-            components: vec![xi, yi],
+            components: vec![xw, yw],
         });
         e.push(S::Call {
             function: k,
@@ -691,7 +820,16 @@ impl Lowering<'_> {
         };
         Ok(match &t {
             Ty::Unit => Vec::new(),
-            Ty::Int | Ty::Num(Num::I32 | Num::I16 | Num::I8) => {
+            Ty::Int => {
+                let lo = word(f, at);
+                let hi = word(f, at + 4);
+                let ty = self.wide_ty()?;
+                vec![Exprs::new(f).emit(Expression::Compose {
+                    ty,
+                    components: vec![lo, hi],
+                })]
+            }
+            Ty::Num(Num::I32 | Num::I16 | Num::I8) => {
                 let w = word(f, at);
                 vec![Exprs::new(f).emit(Expression::As {
                     expr: w,
@@ -788,6 +926,28 @@ impl<'f> Exprs<'f> {
         right: Handle<Expression>,
     ) -> Handle<Expression> {
         self.emit(Expression::Binary { op, left, right })
+    }
+
+    /// The `i32` `x` as an `int` (`WideInt` type `wide`): its low word, and its sign.
+    fn wide_of_i32(&mut self, wide: Handle<Type>, x: Handle<Expression>) -> Handle<Expression> {
+        let lo = self.emit(Expression::As {
+            expr: x,
+            kind: ScalarKind::Uint,
+            convert: None,
+        });
+        let zero = self.add(Expression::Literal(Literal::I32(0)));
+        let neg = self.bin(BinaryOperator::Less, x, zero);
+        let all = self.add(Expression::Literal(Literal::U32(u32::MAX)));
+        let none = self.add(Expression::Literal(Literal::U32(0)));
+        let hi = self.emit(Expression::Select {
+            condition: neg,
+            accept: all,
+            reject: none,
+        });
+        self.emit(Expression::Compose {
+            ty: wide,
+            components: vec![lo, hi],
+        })
     }
 
     /// Word `i` of buffer `g`.
@@ -1077,6 +1237,282 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         self.f.expressions.append(e, U)
     }
 
+    fn lit(&mut self, l: Literal) -> Handle<Expression> {
+        self.add(Expression::Literal(l))
+    }
+
+    /// The `int` `i`, as its two words.
+    fn const_wide(&mut self, i: i64) -> Result<Handle<Expression>, String> {
+        let ty = self.l.wide_ty()?;
+        let lo = self.lit(Literal::U32(i as u32));
+        let hi = self.lit(Literal::U32((i >> 32) as u32));
+        Ok(self.emit_expr(Expression::Compose {
+            ty,
+            components: vec![lo, hi],
+        }))
+    }
+
+    /// The `i32` `x` as an `int`.
+    fn wide_of_i32(&mut self, x: Handle<Expression>) -> Result<Handle<Expression>, String> {
+        let ty = self.l.wide_ty()?;
+        let lo = self.emit_expr(Expression::As {
+            expr: x,
+            kind: ScalarKind::Uint,
+            convert: None,
+        });
+        let zero = self.lit(Literal::I32(0));
+        let neg = self.bin(BinaryOperator::Less, x, zero);
+        let all = self.lit(Literal::U32(u32::MAX));
+        let none = self.lit(Literal::U32(0));
+        let hi = self.emit_expr(Expression::Select {
+            condition: neg,
+            accept: all,
+            reject: none,
+        });
+        Ok(self.emit_expr(Expression::Compose {
+            ty,
+            components: vec![lo, hi],
+        }))
+    }
+
+    /// The `u32` `x` as an `int`.
+    fn wide_of_u32(&mut self, x: Handle<Expression>) -> Result<Handle<Expression>, String> {
+        let ty = self.l.wide_ty()?;
+        let hi = self.lit(Literal::U32(0));
+        Ok(self.emit_expr(Expression::Compose {
+            ty,
+            components: vec![x, hi],
+        }))
+    }
+
+    /// The `int` `w`'s low (0) or high (1) word.
+    fn wide_word(&mut self, w: Handle<Expression>, index: u32) -> Handle<Expression> {
+        self.emit_expr(Expression::AccessIndex { base: w, index })
+    }
+
+    /// The `int` `w`'s low 32 bits, as an `i32`: an index, a position.
+    fn wide_i32(&mut self, w: Handle<Expression>) -> Handle<Expression> {
+        let lo = self.wide_word(w, 0);
+        self.emit_expr(Expression::As {
+            expr: lo,
+            kind: ScalarKind::Sint,
+            convert: None,
+        })
+    }
+
+    /// A call of `core::gpu`'s `name` with `args`: an operation on `int`s.
+    fn call_wide(
+        &mut self,
+        name: &str,
+        args: Vec<Handle<Expression>>,
+    ) -> Result<Handle<Expression>, String> {
+        let id = self.l.wide_fn(name)?;
+        let h = self.l.function(Item::Fn(id), &[], &[])?;
+        let r = self.add(Expression::CallResult(h));
+        self.out.push(S::Call {
+            function: h,
+            arguments: args,
+            result: Some(r),
+        });
+        self.after_call();
+        Ok(r)
+    }
+
+    /// After a call: this function stops too if the callee trapped.
+    fn after_call(&mut self) {
+        let g = self.l.globals.expect("the globals");
+        let tp = self.add(Expression::GlobalVariable(g.trapped));
+        let trapped = self.emit_expr(Expression::Load { pointer: tp });
+        let outer = std::mem::take(&mut self.out);
+        let value = self.var_value(0);
+        self.out.push(S::Return { value });
+        let accept = std::mem::replace(&mut self.out, outer);
+        self.out.push(S::If {
+            condition: trapped,
+            accept: Block::from_vec(accept),
+            reject: Block::new(),
+        });
+    }
+
+    /// A trap of kind `class` at `range`: its site in the trap word (the greatest, if several
+    /// instances trap), and this instance stops (`gpu.trap.1`).
+    fn trap_here(&mut self, class: TrapClass, range: TextRange) {
+        let g = self.l.globals.expect("the globals");
+        let site = self.l.sites.len() as u32;
+        self.l.sites.push((class, self.body.src, range));
+        let base = self.add(Expression::GlobalVariable(g.trap));
+        let word = self.emit_expr(Expression::AccessIndex { base, index: 0 });
+        let value = self.lit(Literal::U32(site + 1));
+        self.out.push(S::Atomic {
+            pointer: word,
+            fun: AtomicFunction::Max,
+            value,
+            result: None,
+        });
+        let tp = self.add(Expression::GlobalVariable(g.trapped));
+        let yes = self.lit(Literal::Bool(true));
+        self.out.push(S::Store {
+            pointer: tp,
+            value: yes,
+        });
+    }
+
+    /// Whether `a op b` overflows sized integer type `n` (held in 32 bits), as on the CPU
+    /// (`num.ops.1`): the operation's 32-bit result checked against the type's range.
+    fn small_overflows(
+        &mut self,
+        op: BinOp,
+        n: Num,
+        a: Handle<Expression>,
+        b: Handle<Expression>,
+    ) -> Handle<Expression> {
+        let signed = n.is_signed();
+        let bits = n.bits();
+        let (lo, hi) = n.int_range();
+        let k = |this: &mut Self, v: i128| {
+            if signed {
+                this.lit(Literal::I32(v as i32))
+            } else {
+                this.lit(Literal::U32(v as u32))
+            }
+        };
+        // Whether `r` is out of the type's range (never, for 32 bits).
+        let out_of_range = |this: &mut Self, r: Handle<Expression>| {
+            if bits >= 32 {
+                return this.lit(Literal::Bool(false));
+            }
+            let (min, max) = (k(this, lo), k(this, hi));
+            let below = this.bin(BinaryOperator::Less, r, min);
+            let above = this.bin(BinaryOperator::Greater, r, max);
+            this.bin(BinaryOperator::LogicalOr, below, above)
+        };
+        match op {
+            BinOp::Add | BinOp::Sub | BinOp::Mul => {
+                let nop = match op {
+                    BinOp::Add => BinaryOperator::Add,
+                    BinOp::Sub => BinaryOperator::Subtract,
+                    _ => BinaryOperator::Multiply,
+                };
+                let r = self.bin(nop, a, b);
+                if bits < 32 {
+                    return out_of_range(self, r);
+                }
+                match (op, signed) {
+                    (BinOp::Add, true) => {
+                        let x = self.bin(BinaryOperator::ExclusiveOr, a, r);
+                        let y = self.bin(BinaryOperator::ExclusiveOr, b, r);
+                        let both = self.bin(BinaryOperator::And, x, y);
+                        let zero = k(self, 0);
+                        self.bin(BinaryOperator::Less, both, zero)
+                    }
+                    (BinOp::Sub, true) => {
+                        let x = self.bin(BinaryOperator::ExclusiveOr, a, b);
+                        let y = self.bin(BinaryOperator::ExclusiveOr, a, r);
+                        let both = self.bin(BinaryOperator::And, x, y);
+                        let zero = k(self, 0);
+                        self.bin(BinaryOperator::Less, both, zero)
+                    }
+                    (BinOp::Add, false) => self.bin(BinaryOperator::Less, r, a),
+                    (BinOp::Sub, false) => self.bin(BinaryOperator::Less, a, b),
+                    _ => {
+                        // `a * b` overflowed if dividing by `a` does not give `b` back (and
+                        // `-1 * MIN`).
+                        let zero = k(self, 0);
+                        let nonzero = self.bin(BinaryOperator::NotEqual, a, zero);
+                        let back = self.bin(BinaryOperator::Divide, r, a);
+                        let differs = self.bin(BinaryOperator::NotEqual, back, b);
+                        let wrong = if signed {
+                            let minus = k(self, -1);
+                            let least = k(self, lo);
+                            let am = self.bin(BinaryOperator::Equal, a, minus);
+                            let bl = self.bin(BinaryOperator::Equal, b, least);
+                            let edge = self.bin(BinaryOperator::LogicalAnd, am, bl);
+                            self.bin(BinaryOperator::LogicalOr, differs, edge)
+                        } else {
+                            differs
+                        };
+                        self.bin(BinaryOperator::LogicalAnd, nonzero, wrong)
+                    }
+                }
+            }
+            BinOp::Div if signed => {
+                let (minus, least) = (k(self, -1), k(self, lo));
+                let al = self.bin(BinaryOperator::Equal, a, least);
+                let bm = self.bin(BinaryOperator::Equal, b, minus);
+                self.bin(BinaryOperator::LogicalAnd, al, bm)
+            }
+            BinOp::Shl | BinOp::Shr => {
+                // The amount is the type's: negative or the width or more is out of range.
+                let amount = self.emit_expr(Expression::As {
+                    expr: b,
+                    kind: ScalarKind::Uint,
+                    convert: None,
+                });
+                let width = self.lit(Literal::U32(bits));
+                let too_far = self.bin(BinaryOperator::GreaterEqual, amount, width);
+                if op == BinOp::Shr {
+                    return too_far;
+                }
+                // `<<` also loses no bit: shifting back gives `a`, and the result is in range.
+                let r = self.bin(BinaryOperator::ShiftLeft, a, amount);
+                let back = self.bin(BinaryOperator::ShiftRight, r, amount);
+                let lost = self.bin(BinaryOperator::NotEqual, back, a);
+                let range = out_of_range(self, r);
+                let bad = self.bin(BinaryOperator::LogicalOr, lost, range);
+                self.bin(BinaryOperator::LogicalOr, too_far, bad)
+            }
+            _ => self.lit(Literal::Bool(false)),
+        }
+    }
+
+    /// `v`, of number type `from`, as one of type `to` (`num.convert.1`, `num.widen.1`).
+    fn convert(
+        &mut self,
+        v: Handle<Expression>,
+        from: &Ty,
+        to: &Ty,
+    ) -> Result<Handle<Expression>, String> {
+        let (from, to) = (self.l.plain(from), self.l.plain(to));
+        match (&from, &to) {
+            (Ty::Int, Ty::Int) => Ok(v),
+            (Ty::Int, Ty::Num(Num::F32)) => {
+                let lo = self.wide_word(v, 0);
+                let hi = self.wide_word(v, 1);
+                let hs = self.emit_expr(Expression::As {
+                    expr: hi,
+                    kind: ScalarKind::Sint,
+                    convert: None,
+                });
+                let hf = self.emit_expr(Expression::As {
+                    expr: hs,
+                    kind: ScalarKind::Float,
+                    convert: Some(4),
+                });
+                let lf = self.emit_expr(Expression::As {
+                    expr: lo,
+                    kind: ScalarKind::Float,
+                    convert: Some(4),
+                });
+                let scale = self.lit(Literal::F32(4_294_967_296.0));
+                let high = self.bin(BinaryOperator::Multiply, hf, scale);
+                Ok(self.bin(BinaryOperator::Add, high, lf))
+            }
+            (Ty::Int, Ty::Num(n)) if n.is_signed() => Ok(self.wide_i32(v)),
+            (Ty::Int, _) => Ok(self.wide_word(v, 0)),
+            (Ty::Num(Num::F32), Ty::Int) => {
+                let i = self.emit_expr(Expression::As {
+                    expr: v,
+                    kind: ScalarKind::Sint,
+                    convert: Some(4),
+                });
+                self.wide_of_i32(i)
+            }
+            (Ty::Num(n), Ty::Int) if n.is_signed() => self.wide_of_i32(v),
+            (_, Ty::Int) => self.wide_of_u32(v),
+            _ => self.cast(v, &to),
+        }
+    }
+
     /// An expression, emitted in the statements being written.
     fn emit_expr(&mut self, e: Expression) -> Handle<Expression> {
         let h = self.f.expressions.append(e, U);
@@ -1147,7 +1583,8 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                 // An element: of the array, or of the slice's array, past where it starts.
                 Projection::Index(l) => {
                     let ip = self.var(l.index());
-                    let index = self.emit_expr(Expression::Load { pointer: ip });
+                    let wide = self.emit_expr(Expression::Load { pointer: ip });
+                    let index = self.wide_i32(wide);
                     match self.l.plain(&t) {
                         Ty::Array(e, _) => {
                             p = self.emit_expr(Expression::Access { base: p, index });
@@ -1226,8 +1663,9 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             .ok_or("a part of an array that is not the kernel's")?;
         let ty = self.l.slice_ty(&elem, cap)?;
         let (ap, bpv) = (self.var(a.index()), self.var(b.index()));
-        let av = self.emit_expr(Expression::Load { pointer: ap });
-        let bv = self.emit_expr(Expression::Load { pointer: bpv });
+        let aw = self.emit_expr(Expression::Load { pointer: ap });
+        let bw = self.emit_expr(Expression::Load { pointer: bpv });
+        let (av, bv) = (self.wide_i32(aw), self.wide_i32(bw));
         let len = self.bin(BinaryOperator::Subtract, bv, av);
         let (data, start) = match self.l.plain(&bt) {
             Ty::Array(..) => (self.emit_expr(Expression::Load { pointer: bp }), av),
@@ -1253,7 +1691,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                 .map(|(ptr, _)| self.emit_expr(Expression::Load { pointer: ptr }))),
             Operand::Const(c) => Ok(match c {
                 Const::Unit => None,
-                Const::Int(i) => Some(self.add(Expression::Literal(Literal::I32(*i as i32)))),
+                Const::Int(i) => Some(self.const_wide(*i)?),
                 Const::Bool(b) => Some(self.add(Expression::Literal(Literal::Bool(*b)))),
                 Const::Char(c) => Some(self.add(Expression::Literal(Literal::U32(*c as u32)))),
                 Const::Num(n, bits) => Some(self.add(Expression::Literal(match n {
@@ -1288,6 +1726,36 @@ impl<'l, 'a> FnLowering<'l, 'a> {
     }
 
     fn statement(&mut self, s: &Statement) -> Result<(), String> {
+        // A check (`gpu.trap.1`): if it fails, the trap, and this instance stops.
+        if let Statement::Assert {
+            cond,
+            expected,
+            trap,
+            range,
+            ..
+        } = s
+        {
+            let c = self.operand(cond)?.ok_or("a condition")?;
+            let fails = if *expected {
+                self.emit_expr(Expression::Unary {
+                    op: UnaryOperator::LogicalNot,
+                    expr: c,
+                })
+            } else {
+                c
+            };
+            let outer = std::mem::take(&mut self.out);
+            self.trap_here(*trap, *range);
+            let value = self.var_value(0);
+            self.out.push(S::Return { value });
+            let accept = std::mem::replace(&mut self.out, outer);
+            self.out.push(S::If {
+                condition: fails,
+                accept: Block::from_vec(accept),
+                reject: Block::new(),
+            });
+            return Ok(());
+        }
         if let Statement::Assign(place, rv) = s {
             let Some((ptr, ty)) = self.place(place)? else {
                 return Ok(());
@@ -1299,7 +1767,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                 });
             }
         }
-        // `Assert`s (traps are not checked on the GPU), `Read`, `StorageDead`, `Observe`.
+        // `Read`, `StorageDead`, `Observe`.
         Ok(())
     }
 
@@ -1354,27 +1822,46 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                 let Ty::Len(n) = self.concrete(n) else {
                     return Err("a length not known in a kernel".to_string());
                 };
-                Some(self.add(Expression::Literal(Literal::I32(n as i32))))
+                Some(self.const_wide(n)?)
             }
-            Rvalue::Len(place) => Some(self.len_of(place)?),
+            Rvalue::Len(place) => {
+                let n = self.len_of(place)?;
+                Some(self.wide_of_i32(n)?)
+            }
+            // An `int` index is in bounds if its high word is 0 and its low below the length.
             Rvalue::InBounds(i, place) => {
                 let i = self.operand(i)?.ok_or("an index")?;
                 let n = self.len_of(place)?;
-                let zero = self.add(Expression::Literal(Literal::I32(0)));
-                let lo = self.bin(BinaryOperator::GreaterEqual, i, zero);
-                let hi = self.bin(BinaryOperator::Less, i, n);
-                Some(self.bin(BinaryOperator::LogicalAnd, lo, hi))
+                let nu = self.emit_expr(Expression::As {
+                    expr: n,
+                    kind: ScalarKind::Uint,
+                    convert: None,
+                });
+                let (lo, hi) = (self.wide_word(i, 0), self.wide_word(i, 1));
+                let zero = self.lit(Literal::U32(0));
+                let small = self.bin(BinaryOperator::Equal, hi, zero);
+                let below = self.bin(BinaryOperator::Less, lo, nu);
+                Some(self.bin(BinaryOperator::LogicalAnd, small, below))
             }
             Rvalue::SpanOk(a, b, place) => {
                 let a = self.operand(a)?.ok_or("an index")?;
                 let b = self.operand(b)?.ok_or("an index")?;
                 let n = self.len_of(place)?;
-                let zero = self.add(Expression::Literal(Literal::I32(0)));
-                let c0 = self.bin(BinaryOperator::LessEqual, zero, a);
-                let c1 = self.bin(BinaryOperator::LessEqual, a, b);
-                let c2 = self.bin(BinaryOperator::LessEqual, b, n);
-                let c01 = self.bin(BinaryOperator::LogicalAnd, c0, c1);
-                Some(self.bin(BinaryOperator::LogicalAnd, c01, c2))
+                let nu = self.emit_expr(Expression::As {
+                    expr: n,
+                    kind: ScalarKind::Uint,
+                    convert: None,
+                });
+                let zero = self.lit(Literal::U32(0));
+                let (alo, ahi) = (self.wide_word(a, 0), self.wide_word(a, 1));
+                let (blo, bhi) = (self.wide_word(b, 0), self.wide_word(b, 1));
+                let a0 = self.bin(BinaryOperator::Equal, ahi, zero);
+                let b0 = self.bin(BinaryOperator::Equal, bhi, zero);
+                let c1 = self.bin(BinaryOperator::LessEqual, alo, blo);
+                let c2 = self.bin(BinaryOperator::LessEqual, blo, nu);
+                let x = self.bin(BinaryOperator::LogicalAnd, a0, b0);
+                let y = self.bin(BinaryOperator::LogicalAnd, c1, c2);
+                Some(self.bin(BinaryOperator::LogicalAnd, x, y))
             }
             Rvalue::Ref(_, place) => self
                 .place(place)?
@@ -1384,6 +1871,14 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                 let Some(a) = self.operand(a)? else {
                     return Ok(None);
                 };
+                if t == Ty::Int {
+                    let name = if *op == UnOp::Neg {
+                        "wide_neg"
+                    } else {
+                        "wide_not"
+                    };
+                    return Ok(Some(self.call_wide(name, vec![a])?));
+                }
                 let op = match (op, &t) {
                     (UnOp::Neg, _) => UnaryOperator::Negate,
                     (UnOp::Not, Ty::Bool) => UnaryOperator::LogicalNot,
@@ -1396,6 +1891,9 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                 let (Some(a), Some(b)) = (self.operand(a)?, self.operand(b)?) else {
                     return Err("an operator on `()` in a kernel".to_string());
                 };
+                if ta == Ty::Int {
+                    return Ok(Some(self.wide_binary(*op, a, b)?));
+                }
                 let bool_ = ta == Ty::Bool;
                 let nop = match op {
                     BinOp::Add => BinaryOperator::Add,
@@ -1433,9 +1931,42 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                     right: b,
                 }))
             }
-            // Overflow is not checked on the GPU.
-            Rvalue::Overflows(..) | Rvalue::NegOverflows(_) => {
-                Some(self.add(Expression::Literal(Literal::Bool(false))))
+            // Overflow is checked as on the CPU (`gpu.trap.1`).
+            Rvalue::Overflows(op, a, b) => {
+                let ta = self.l.plain(&self.operand_ty(a));
+                let (Some(a), Some(b)) = (self.operand(a)?, self.operand(b)?) else {
+                    return Err("an operator on `()` in a kernel".to_string());
+                };
+                Some(match ta {
+                    Ty::Int => {
+                        let (name, args) = match op {
+                            BinOp::Add => ("wide_add_overflows", vec![a, b]),
+                            BinOp::Sub => ("wide_sub_overflows", vec![a, b]),
+                            BinOp::Mul => ("wide_mul_overflows", vec![a, b]),
+                            BinOp::Div => ("wide_div_overflows", vec![a, b]),
+                            BinOp::Shl => ("wide_shl_overflows", vec![a, b]),
+                            BinOp::Shr => ("wide_shift_overflows", vec![b]),
+                            _ => return Ok(Some(self.lit(Literal::Bool(false)))),
+                        };
+                        self.call_wide(name, args)?
+                    }
+                    Ty::Num(n) if !n.is_float() => self.small_overflows(*op, n, a, b),
+                    _ => self.lit(Literal::Bool(false)),
+                })
+            }
+            Rvalue::NegOverflows(a) => {
+                let ta = self.l.plain(&self.operand_ty(a));
+                let Some(a) = self.operand(a)? else {
+                    return Ok(None);
+                };
+                Some(match ta {
+                    Ty::Int => self.call_wide("wide_neg_overflows", vec![a])?,
+                    Ty::Num(n) if n.is_signed() => {
+                        let least = self.lit(Literal::I32(n.int_range().0 as i32));
+                        self.bin(BinaryOperator::Equal, a, least)
+                    }
+                    _ => self.lit(Literal::Bool(false)),
+                })
             }
             Rvalue::Aggregate(kind, ops) => {
                 let Some(th) = self.l.ty(ty)? else {
@@ -1481,14 +2012,16 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                     base: ptr,
                     index: 0,
                 });
-                Some(self.emit_expr(Expression::Load { pointer: tag }))
+                let tag = self.emit_expr(Expression::Load { pointer: tag });
+                Some(self.wide_of_i32(tag)?)
             }
             Rvalue::Widen(op, to) => {
                 let to = self.concrete(to);
+                let from = self.operand_ty(op);
                 let Some(v) = self.operand(op)? else {
                     return Ok(None);
                 };
-                Some(self.cast(v, &to)?)
+                Some(self.convert(v, &from, &to)?)
             }
             other => return Err(format!("`{other:?}` in a kernel")),
         })
@@ -1509,6 +2042,55 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         }))
     }
 
+    /// `a op b` on `int`s: a call of `core::gpu`'s function for it (`gpu.int.1`).
+    fn wide_binary(
+        &mut self,
+        op: BinOp,
+        a: Handle<Expression>,
+        b: Handle<Expression>,
+    ) -> Result<Handle<Expression>, String> {
+        let not = |this: &mut Self, e| {
+            this.emit_expr(Expression::Unary {
+                op: UnaryOperator::LogicalNot,
+                expr: e,
+            })
+        };
+        Ok(match op {
+            BinOp::Add => self.call_wide("wide_add", vec![a, b])?,
+            BinOp::Sub => self.call_wide("wide_sub", vec![a, b])?,
+            BinOp::Mul => self.call_wide("wide_mul", vec![a, b])?,
+            BinOp::Div => self.call_wide("wide_div", vec![a, b])?,
+            BinOp::Rem => self.call_wide("wide_rem", vec![a, b])?,
+            BinOp::BitAnd => self.call_wide("wide_and", vec![a, b])?,
+            BinOp::BitOr => self.call_wide("wide_or", vec![a, b])?,
+            BinOp::BitXor => self.call_wide("wide_xor", vec![a, b])?,
+            BinOp::Shl | BinOp::Shr => {
+                let n = self.wide_word(b, 0);
+                let name = if op == BinOp::Shl {
+                    "wide_shl"
+                } else {
+                    "wide_shr"
+                };
+                self.call_wide(name, vec![a, n])?
+            }
+            BinOp::Eq => self.call_wide("wide_eq", vec![a, b])?,
+            BinOp::Ne => {
+                let e = self.call_wide("wide_eq", vec![a, b])?;
+                not(self, e)
+            }
+            BinOp::Lt => self.call_wide("wide_lt", vec![a, b])?,
+            BinOp::Gt => self.call_wide("wide_lt", vec![b, a])?,
+            BinOp::Le => {
+                let e = self.call_wide("wide_lt", vec![b, a])?;
+                not(self, e)
+            }
+            BinOp::Ge => {
+                let e = self.call_wide("wide_lt", vec![a, b])?;
+                not(self, e)
+            }
+        })
+    }
+
     /// Where a block with terminator `t` goes; a call's statements are written first.
     fn exit(&mut self, t: &Terminator) -> Result<Exit, String> {
         Ok(match t {
@@ -1518,11 +2100,17 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                 Exit::Branch(c, then.index(), else_.index())
             }
             Terminator::Return => Exit::Return(self.var_value(0)),
-            // A trap, or code that cannot run: the invocation ends (traps are not checked).
-            Terminator::Trap(..)
-            | Terminator::Unreachable
-            | Terminator::Resume
-            | Terminator::Fail(_) => Exit::Abort(self.var_value(0)),
+            // A trap, or code that cannot run: the trap, and the instance stops (`gpu.trap.1`).
+            Terminator::Trap(class, _) => {
+                let range = self.l.at.map_or_else(TextRange::default, |(_, r)| r);
+                self.trap_here(*class, range);
+                Exit::Abort(self.var_value(0))
+            }
+            Terminator::Unreachable | Terminator::Resume | Terminator::Fail(_) => {
+                let range = self.l.at.map_or_else(TextRange::default, |(_, r)| r);
+                self.trap_here(TrapClass::Unreachable, range);
+                Exit::Abort(self.var_value(0))
+            }
             Terminator::Call {
                 callee,
                 args,
@@ -1591,10 +2179,11 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         };
         // A slice's length.
         if owner == "slice" && name == "len" {
-            let v = self.emit_expr(Expression::AccessIndex {
+            let n = self.emit_expr(Expression::AccessIndex {
                 base: *vals.first().ok_or("a slice")?,
                 index: 2,
             });
+            let v = self.wide_of_i32(n)?;
             store(self, v);
             return Ok(());
         }
@@ -1644,7 +2233,8 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             // A conversion: to the call's last type argument.
             if matches!(name, "to" | "truncate" | "wrap" | "saturate") {
                 let to = fargs.last().cloned().ok_or("a conversion's type")?;
-                let v = self.cast(vals[0], &to)?;
+                let from = self.operand_ty(&args[0]);
+                let v = self.convert(vals[0], &from, &to)?;
                 store(self, v);
                 return Ok(());
             }
@@ -1675,6 +2265,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             arguments: vals,
             result,
         });
+        self.after_call();
         if let Some(r) = result {
             store(self, r);
         }
@@ -1704,6 +2295,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         };
         let px = coord(self, g.px);
         let py = coord(self, g.py);
+        let (px, py) = (self.wide_of_i32(px)?, self.wide_of_i32(py)?);
         let pair = self.emit_expr(Expression::Compose {
             ty: pair_ty,
             components: vec![px, py],
@@ -1715,6 +2307,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             arguments,
             result: Some(result),
         });
+        self.after_call();
         self.set_pixel(&[tile, px, py, result])
     }
 
@@ -1732,15 +2325,22 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             base: *tile,
             index: 1,
         });
+        // Positions in the image are well within 32 bits.
+        let (tx, ty, px, py) = (
+            self.wide_i32(tx),
+            self.wide_i32(ty),
+            self.wide_i32(*px),
+            self.wide_i32(*py),
+        );
         let x = self.emit_expr(Expression::Binary {
             op: BinaryOperator::Add,
             left: tx,
-            right: *px,
+            right: px,
         });
         let y = self.emit_expr(Expression::Binary {
             op: BinaryOperator::Add,
             left: ty,
-            right: *py,
+            right: py,
         });
         let xu = self.emit_expr(Expression::As {
             expr: x,

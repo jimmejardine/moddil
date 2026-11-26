@@ -1,0 +1,10 @@
+[mod]
+name = "gpu-checks"
+edition = "2027"
+
+[[exe]]
+name = "checks"
+main = "src/main.moddil"
+
+[dependencies]
+gpu = { path = "../../../../mods/gpu" }

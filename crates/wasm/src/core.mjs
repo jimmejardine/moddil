@@ -352,7 +352,9 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
     return { pixels, size };
   };
   // Runs the kernel `source` over a `width` x `height` image: a workgroup of 8 x 8 invocations
-  // per 8 x 8 tile. `mode` 1 shows the image, 2 reads its pixels back into `out`. 1 if it ran.
+  // per 8 x 8 tile. `mode` 1 shows the image, 2 reads its pixels back into `out`. 0 if it could
+  // not run, 1 if it ran, and `k + 2` if it trapped at its check `k` (`gpu.trap.1`): read back
+  // with the pixels, or (showing only) at the frames whose GPU time is measured.
   const dispatch = async (sp, sn, pp, pn, width, height, op, on, mode) => {
     const d = page ? await device() : null;
     if (!d || width <= 0 || height <= 0) return 0;
@@ -370,10 +372,14 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
       padded.set(bytes(pp >>> 0, n));
       d.queue.writeBuffer(params, 0, padded);
       const { pixels, size } = imageBuffers(d, width, height);
+      // The trap word, cleared: the site of a check that failed, plus one.
+      const trap = buffer(d, 'trap', 16, STORAGE() | GPUBufferUsage.COPY_SRC);
+      d.queue.writeBuffer(trap, 0, new Uint32Array(4));
       const enc = d.createCommandEncoder();
       const pass = enc.beginComputePass();
       pass.setPipeline(pipeline);
-      pass.setBindGroup(0, group(d, source, pipeline.getBindGroupLayout(0), [params, pixels, size]));
+      const layout = pipeline.getBindGroupLayout(0);
+      pass.setBindGroup(0, group(d, source, layout, [params, pixels, size, trap]));
       pass.dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
       pass.end();
       if (mode & 1) encodeShow(d, enc, width, height);
@@ -383,13 +389,25 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
         read = buffer(d, 'read', words * 4, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
         enc.copyBufferToBuffer(pixels, 0, read, 0, words * 4);
       }
+      const timed = screen.dispatches++ % 30 === 0;
+      let trapped = null;
+      if (read || timed) {
+        trapped = buffer(d, 'trapped', 16, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
+        enc.copyBufferToBuffer(trap, 0, trapped, 0, 16);
+      }
       const t0 = performance.now();
       d.queue.submit([enc.finish()]);
       screen.size = `${width}x${height}`;
       // The GPU's time, now and then: how long until the queue is done (this frame waits).
-      if (screen.dispatches++ % 30 === 0) {
+      if (timed) {
         await d.queue.onSubmittedWorkDone();
         screen.gpuMs = performance.now() - t0;
+      }
+      let site = 0;
+      if (trapped) {
+        await trapped.mapAsync(GPUMapMode.READ, 0, 16);
+        site = new Uint32Array(trapped.getMappedRange(0, 16))[0];
+        trapped.unmap();
       }
       if (read) {
         await read.mapAsync(GPUMapMode.READ, 0, words * 4);
@@ -399,7 +417,7 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
       }
       // For a test (and anyone curious): the GPU drew a frame.
       document.body.dataset.gpu = 'used';
-      return 1;
+      return site === 0 ? 1 : site + 1;
     } catch (e) {
       console.error('the GPU could not run the kernel:', e);
       return 0;

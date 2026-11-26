@@ -103,8 +103,8 @@ mod native {
     }
 
     /// No GPU natively yet (`gpu.1`): nothing is dispatched.
-    pub(crate) fn gpu_dispatch(_: &str, _: &[u8], _: i64, _: i64, _: &mut [u32], _: u32) -> bool {
-        false
+    pub(crate) fn gpu_dispatch(_: &str, _: &[u8], _: i64, _: i64, _: &mut [u32], _: u32) -> u32 {
+        0
     }
 
     /// No page natively: nothing is shown (`gpu.1`).
@@ -150,7 +150,8 @@ mod host {
         fn moddil_host_os_event(i: u32, out: *mut f64) -> u32;
         /// Runs a kernel (`gpu.1`): WGSL `source`, `params`, over a `width` by `height` image,
         /// which `mode` says to show (1) and to read back into `out` (2); suspends (JSPI) until
-        /// it has. 1 if it could.
+        /// it has. 0 if it could not, 1 if it ran, `k + 2` if it trapped at check `k`
+        /// (`gpu.trap.1`).
         fn moddil_host_gpu_dispatch(
             source: *const u8,
             source_len: u32,
@@ -301,7 +302,7 @@ mod host {
         height: i64,
         out: &mut [u32],
         mode: u32,
-    ) -> bool {
+    ) -> u32 {
         // SAFETY: each buffer lives across the call, and the host writes at most `out.len()`
         // words.
         unsafe {
@@ -315,7 +316,7 @@ mod host {
                 out.as_mut_ptr(),
                 out.len() as u32,
                 mode,
-            ) != 0
+            )
         }
     }
 

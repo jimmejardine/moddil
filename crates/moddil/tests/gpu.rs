@@ -131,8 +131,13 @@ fn a_kernel_with_arrays_and_slices_lowers_to_valid_wgsl() {
     let wgsl = wgsl(&root, "bands");
     // Its own array, the parameters' array, and the slices of it a helper is given.
     assert!(
-        wgsl.contains("array<i32, 4>") && wgsl.contains("array<f32, 4>"),
+        wgsl.contains("array<WideInt, 4>") && wgsl.contains("array<f32, 4>"),
         "{wgsl}"
     );
     assert!(wgsl.contains("struct Slice"), "{wgsl}");
+    // `int` is two words, its operations `core::gpu`'s, and failed checks write the trap word.
+    assert!(
+        wgsl.contains("fn wide_add(") && wgsl.contains("atomicMax((&trap[0])"),
+        "{wgsl}"
+    );
 }

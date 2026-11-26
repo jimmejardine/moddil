@@ -341,3 +341,71 @@ fn the_mandelbulb_flies_on_webgpu_in_a_browser() {
     }
     assert_eq!(nums.len(), 3, "{line}");
 }
+
+/// On WebGPU (SwiftShader's, in a headless Chrome), `int` in a kernel is 64 bits, as on the CPU,
+/// and a check that fails in a kernel traps the program at its source (`gpu.int.1`,
+/// `gpu.trap.1`): `tests/gpu-checks`' kernels give the simulator's image, then one overflows.
+#[test]
+fn a_kernel_on_webgpu_has_64_bit_ints_and_traps() {
+    let Some(chrome) = chrome() else {
+        eprintln!("skipped: no Chrome to run the page in");
+        return;
+    };
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("web")
+        .join("gpu-checks");
+    std::fs::create_dir_all(&dir).expect("a temporary directory");
+    let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/gpu-checks");
+    let out = Command::new(env!("CARGO_BIN_EXE_moddil"))
+        .args(["build", "--wasm"])
+        .arg(&project)
+        .arg("-o")
+        .arg(dir.join("checks.mjs"))
+        .output()
+        .expect("moddil runs");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let (port, done) = serve(&dir);
+    let profile = dir.join("chrome-profile");
+    let _ = std::fs::remove_dir_all(&profile);
+    let _browser = Browser(
+        Command::new(chrome)
+            .args([
+                "--headless=new",
+                "--no-first-run",
+                "--no-sandbox",
+                "--enable-unsafe-webgpu",
+                "--use-webgpu-adapter=swiftshader",
+                "--enable-features=Vulkan",
+            ])
+            .arg(format!("--user-data-dir={}", profile.display()))
+            .arg(format!("http://127.0.0.1:{port}/checks.html"))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("chrome runs"),
+    );
+    let dom = done
+        .recv_timeout(Duration::from_secs(300))
+        .expect("the page finishes within 300 s");
+    if dom.contains("data-gpu=\"none\"") && cfg!(target_os = "macos") {
+        eprintln!("skipped: no WebGPU adapter");
+        return;
+    }
+    assert!(
+        dom.contains("data-gpu=\"used\""),
+        "the GPU did not run: {dom}"
+    );
+    // The 64-bit arithmetic gave the simulator's image.
+    assert!(dom.contains("wide ints agree"), "{dom}");
+    // The overflow trapped the program, at the product in the kernel's source.
+    assert!(!dom.contains("not reached"), "{dom}");
+    assert!(
+        dom.contains("overflow") && dom.contains("main.moddil:30"),
+        "{dom}"
+    );
+    assert!(!dom.contains("data-exit=\"0\""), "{dom}");
+}
