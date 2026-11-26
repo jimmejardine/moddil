@@ -34,14 +34,14 @@ impl Machine<'_> {
                             unreachable!("a checked tag")
                         };
                         let f = self.program.fns[&k].clone();
-                        // A tag taking `&[String]` has holes (`comptime.tag.2`).
+                        // A tag taking `&[&str]` has holes (`comptime.tag.2`).
                         let parts = f
                             .node
                             .params()
                             .and_then(|l| l.params().next())
                             .and_then(|p| p.ty())
                             .is_some_and(|t| {
-                                t.syntax().text().to_string().replace(' ', "") == "&[String]"
+                                t.syntax().text().to_string().replace(' ', "") == "&[&str]"
                             });
                         if parts {
                             return self.parts_tag(&f, &tok, range);

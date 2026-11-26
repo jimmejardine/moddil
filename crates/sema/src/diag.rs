@@ -275,7 +275,7 @@ codes! {
     /// An error compile-time code reported with `compile_error`, where it said.
     E1010 = "error from compile-time code",
     /// A tagged literal whose tag is not a `#[tag]` function in scope, or a `#[tag]` that is not
-    /// a `const fn` taking one `&str` or `&[String]`.
+    /// a `const fn` taking one `&str` or `&[&str]`.
     E1011 = "invalid tag",
     /// A tagged literal whose fields cannot be (`comptime.tag.fields.2`): its tag is in the
     /// literal's own mod, or its fields' names are not distinct names.

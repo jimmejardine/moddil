@@ -1,0 +1,16 @@
+// covers: view.infect.1, view.borrow.1
+
+// An array of borrows borrows what they borrow, for as long as it is used.
+fn changed_while_held() -> int {
+    let mut x = 1;
+    let held = [&x, &x];
+    x = 2;  //~ E0306
+    *held[0]
+}
+
+fn repeated_while_held() -> int {
+    let mut x = 1;
+    let held = [&x; 4];
+    x = 2;  //~ E0306
+    *held[3]
+}

@@ -6,10 +6,10 @@ struct Query {
 
 // A tag with holes: it takes the literal's text, split at its holes.
 #[tag]
-const fn q(parts: &[String]) -> Query {
+const fn q(parts: &[&str]) -> Query {
     let mut out = Vec::new();
     for p in parts {
-        out.push(p.clone());
+        out.push(p.to_string());
     }
     Query { parts: out }
 }
@@ -27,7 +27,7 @@ struct Count {
 }
 
 #[tag]
-const fn count(parts: &[String]) -> Count {
+const fn count(parts: &[&str]) -> Count {
     Count { parts: parts.len() }
 }
 

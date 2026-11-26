@@ -1,0 +1,6 @@
+// covers: view.infect.1
+
+// An array of borrows is a view, so no field of a struct that is not one holds it.
+struct Holder {
+    pair: [&int; 2],  //~ E0309
+}

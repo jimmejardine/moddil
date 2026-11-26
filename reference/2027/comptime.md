@@ -53,11 +53,11 @@ calls `name`, a `const fn` marked `#[tag]` in scope taking a `&str`, with the li
 written: as a raw string's, its `\` kept (a block dedented as a raw block is), and with no holes:
 its braces are text. The call is a `const { }` block (**comptime.block.2**): computed when
 compiling, so its value is static data, and an error in it is a compile error. A tag that is not
-such a function in scope, or that takes anything but one `&str` or one `&[String]`
+such a function in scope, or that takes anything but one `&str` or one `&[&str]`
 (**comptime.tag.2**), is an error (E1011). The `moddil/regex` mod's `re` is one: `re"^\d+$"` is a
 `Regex` compiled when compiling.
 
-**comptime.tag.2** A tag taking `&[String]` has **holes**: in its literal, `{e}` is an expression
+**comptime.tag.2** A tag taking `&[&str]` has **holes**: in its literal, `{e}` is an expression
 `e` (E0902 if empty) and `{{` and `}}` are braces (a lone `}` is E0902). The text, as written but
 for those braces, is split at the holes into one part more than there are holes, and the tag is
 called with them in a `const { }` block. With no holes the literal is the tag's value; with holes

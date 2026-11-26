@@ -253,9 +253,14 @@ impl Cx<'_> {
     /// Every constructor of `ty`, with integers split at the boundaries of the ranges in `heads`.
     /// `None` for a type whose values are not analysed (an error).
     fn all_ctors(&self, ty: &Ty, heads: &[&DPat]) -> Option<Vec<Ctor>> {
-        Some(match ty.strip_ref() {
+        // Through every borrow: a pattern matches what they point to (`&&str` too).
+        let mut inner = ty;
+        while let Ty::Ref(_, t) = inner {
+            inner = t;
+        }
+        Some(match inner {
             Ty::Bool => vec![Ctor::Bool(false), Ctor::Bool(true)],
-            Ty::Refined(..) => return self.all_ctors(&self.items.base(ty.strip_ref()), heads),
+            Ty::Refined(..) => return self.all_ctors(&self.items.base(inner), heads),
             t @ (Ty::Int | Ty::Char) => split_ints(heads, 0, int_span(t)),
             t @ Ty::Num(n) if !n.is_float() => split_ints(heads, 0, int_span(t)),
             // A float is matched by bindings and `_` only.

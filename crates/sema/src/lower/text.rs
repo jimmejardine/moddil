@@ -289,7 +289,7 @@ impl Lowerer<'_> {
 
     /// `tag"…"` for a tag other than `fmt` (`comptime.tag.1`): a call of the `#[tag]` function
     /// `tag` in scope with the literal's text, in a `const { }` block, so it runs when
-    /// compiling. A tag taking `&[String]` has holes (`comptime.tag.2`): it is called with the
+    /// compiling. A tag taking `&[&str]` has holes (`comptime.tag.2`): it is called with the
     /// text's parts between them, and its value's `bind` with the holes' values.
     fn tag_call(&mut self, tag: &str, lit: &str, range: TextRange) -> ExprId {
         let f = match self
@@ -313,11 +313,10 @@ impl Lowerer<'_> {
                 return self.missing(range);
             }
         };
-        let string = self.items.string_ty();
         let parts = match self.items.fns[f as usize].params.as_slice() {
             [p] if is_str_ref(&p.ty) => false,
             [p] if matches!(&p.ty, Ty::Ref(false, t)
-                if matches!(&**t, Ty::Slice(e) if **e == string)) =>
+                if matches!(&**t, Ty::Slice(e) if is_str_ref(e))) =>
             {
                 true
             }
@@ -325,7 +324,7 @@ impl Lowerer<'_> {
                 self.report(
                     Code::E1011,
                     range,
-                    format!("`{tag}` is a `#[tag]` function, but takes one `&str` or `&[String]`"),
+                    format!("`{tag}` is a `#[tag]` function, but takes one `&str` or `&[&str]`"),
                 );
                 return self.missing(range);
             }
@@ -388,7 +387,7 @@ impl Lowerer<'_> {
         block
     }
 
-    /// `tag"… {e} …"` for a tag taking `&[String]` (`comptime.tag.2`): `const { tag(&[parts]) }`,
+    /// `tag"… {e} …"` for a tag taking `&[&str]` (`comptime.tag.2`): `const { tag(&[parts]) }`,
     /// and with holes, its value's `bind((e, …,))`. The text is as written, but `{{` and `}}`
     /// are braces.
     fn parts_call(&mut self, f: u32, tag: &str, lit: &str, range: TextRange) -> ExprId {
@@ -431,22 +430,9 @@ impl Lowerer<'_> {
         } else {
             TextRange::new(range.start, range.start + tag.len() as u32)
         };
-        // Each part a `String`: an array cannot hold a borrow (`borrow.type.1`).
         let elems = parts
             .into_iter()
-            .map(|t| {
-                let text = self.alloc(ExprKind::Str(t), range);
-                self.alloc(
-                    ExprKind::MethodCall {
-                        receiver: text,
-                        name: "to_string".to_string(),
-                        name_range: range,
-                        generic_args: None,
-                        args: Vec::new(),
-                    },
-                    range,
-                )
-            })
+            .map(|t| self.alloc(ExprKind::Str(t), range))
             .collect();
         let array = self.alloc(ExprKind::Array(elems), range);
         let arg = self.alloc(
@@ -488,7 +474,7 @@ impl Lowerer<'_> {
     }
 
     /// The parts and holes of `inner`, which starts at byte `start` of the file, for a tag taking
-    /// `&[String]`: each hole ends the part in `cur`; false, with an error, if a hole is bad.
+    /// `&[&str]`: each hole ends the part in `cur`; false, with an error, if a hole is bad.
     fn parts_scan(
         &mut self,
         inner: &str,
@@ -623,7 +609,7 @@ impl Lowerer<'_> {
         true
     }
 
-    /// The expression of a hole (of `fmt`, or of a tag taking `&[String]`) whose text starts at
+    /// The expression of a hole (of `fmt`, or of a tag taking `&[&str]`) whose text starts at
     /// byte `at` of the file, parsed where it stands so its ranges are the file's.
     fn hole(&mut self, text: &str, at: usize, range: TextRange) -> Option<ExprId> {
         let wrapper = "fn f(){(";

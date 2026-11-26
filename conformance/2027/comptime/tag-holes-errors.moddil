@@ -5,7 +5,7 @@ struct Query {
 }
 
 #[tag]
-const fn q(parts: &[String]) -> Query {
+const fn q(parts: &[&str]) -> Query {
     Query { parts: parts.len() }
 }
 

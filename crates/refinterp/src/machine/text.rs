@@ -192,7 +192,7 @@ impl Machine<'_> {
             .ok()
     }
 
-    /// `tag"… {e} …"` for a tag `f` taking `&[String]` (`comptime.tag.2`): `f` called with the
+    /// `tag"… {e} …"` for a tag `f` taking `&[&str]` (`comptime.tag.2`): `f` called with the
     /// text's parts between the holes, as written but for `{{` and `}}`, and with holes, its
     /// value's `bind` with a tuple of the holes' values, left to right.
     pub(super) fn parts_tag(
@@ -219,10 +219,7 @@ impl Machine<'_> {
             parts_scan(inner, base + 1, &mut parts, &mut holes, &mut cur);
         }
         parts.push(cur);
-        let mut strings = Vec::new();
-        for p in parts {
-            strings.push(self.string_call("from_str", vec![Value::Str(p.into())], range)?);
-        }
+        let strings = parts.into_iter().map(|p| Value::Str(p.into())).collect();
         let array = self.memory.temp(Value::Array(strings));
         let value = self.invoke(f, vec![Value::Ref(array, false)], HashMap::new(), range)?;
         if holes.is_empty() {
@@ -1011,7 +1008,7 @@ fn exp_text(f32: bool, bits: u64, digits: Option<u32>, upper: bool) -> String {
 /// The expression `text` of a hole that starts at byte `start` of the file, parsed where it
 /// stands so its ranges are the file's.
 /// The parts and holes of `inner`, which starts at byte `at` of the file, of a tag taking
-/// `&[String]` (`comptime.tag.2`): each hole, with where its text starts, ends the part in `cur`.
+/// `&[&str]` (`comptime.tag.2`): each hole, with where its text starts, ends the part in `cur`.
 fn parts_scan(
     inner: &str,
     at: usize,

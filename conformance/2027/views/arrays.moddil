@@ -1,0 +1,40 @@
+// covers: view.infect.1, view.borrow.1
+
+// An array of borrows is a view, as a tuple of them is.
+
+fn longest(words: &[&str]) -> int {
+    let mut most = 0;
+    for w in words {
+        if w.len() > most {
+            most = w.len();
+        }
+    }
+    most
+}
+
+fn total(xs: &[&int]) -> int {
+    let mut sum = 0;
+    for x in xs {
+        sum += **x;
+    }
+    sum
+}
+
+test "an array literal may hold borrows" {
+    let words = ["one", "three", "five"];
+    words[1]  // => "three"
+    ;
+    longest(&words)  // => 5
+    ;
+    let (a, b) = (2, 40);
+    let pair = [&a, &b];
+    total(&pair)  // => 42
+    ;
+    pair[0] + pair[1]  // => 42
+}
+
+test "a repeated borrow" {
+    let x = 7;
+    let three = [&x; 3];
+    total(&three)  // => 21
+}
