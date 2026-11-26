@@ -391,7 +391,10 @@ The wrapper reads `user`, writes the audit log, and either calls `inner` or fail
 
 A literal with a prefix, `prefix"…"`, calls the comptime function `prefix` in scope. The function
 receives the literal text plus any interpolated expressions as **typed holes**, and returns typed
-values or code.
+values or code. A tag taking `&str` gets the text as written, braces and all (so `re"\d{4}"` keeps
+its quantifier); a tag taking `&[String]` gets the text's parts between its `{…}` holes, and the
+holes' values go to its value's `bind` method, whose parameter types them
+([`comptime.tag.2`](../reference/2027/comptime.md)).
 
 ```
 let line  = fmt"{order.id}: {order.qty} @ {order.price}"     // checked against the argument types

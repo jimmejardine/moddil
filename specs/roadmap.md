@@ -29,7 +29,10 @@ Python teams and backend teams come before the browser (decided November 2026,
   the tag's value implements, whose fields make a hidden struct (decided). Evaluating the tag
   then happens while the program is collected, so it needs a sub-program of the tag's mod and its
   dependencies, or an evaluator hook from the interpreter into sema.
-- Holes in tagged literals other than `fmt` (`sql"… {user} …"`), as typed parameters.
+- Raw tagged literals (`sqlr#"…"#`): the lexer gives them, but sema reads `sqlr#` as the tag.
+  They would also let a hole of a tag taking `&[String]` hold a `"` (`comptime.tag.2`).
+- A `compile_error` in a tag taking `&[String]` reported at its bytes of the text, as for a tag
+  taking `&str` (it is reported at the tag now).
 
 **P5. Numbers** (`crates/sema`, `crates/native`, `crates/wasm`, `crates/rt`; L)
 - `usize` and `isize` 32 bits wide on wasm32 (`num.types.2` says a pointer's width; they are 64

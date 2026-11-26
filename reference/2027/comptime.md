@@ -50,11 +50,23 @@ steps, is an error at the const (E1004).
 
 **comptime.tag.1** A **tagged literal** `name"…"` (or a `name"""` block) whose tag is not `fmt`
 calls `name`, a `const fn` marked `#[tag]` in scope taking a `&str`, with the literal's text as
-written: as a raw string's, its `\` kept (a block dedented as a raw block is), and with no holes.
-The call is a `const { }` block (**comptime.block.2**): computed when compiling, so its value is
-static data, and an error in it is a compile error. A tag that is not such a function in scope is
-an error (E1011). The `moddil/regex` mod's `re` is one: `re"^\d+$"` is a `Regex` compiled when
-compiling.
+written: as a raw string's, its `\` kept (a block dedented as a raw block is), and with no holes:
+its braces are text. The call is a `const { }` block (**comptime.block.2**): computed when
+compiling, so its value is static data, and an error in it is a compile error. A tag that is not
+such a function in scope, or that takes anything but one `&str` or one `&[String]`
+(**comptime.tag.2**), is an error (E1011). The `moddil/regex` mod's `re` is one: `re"^\d+$"` is a
+`Regex` compiled when compiling.
+
+**comptime.tag.2** A tag taking `&[String]` has **holes**: in its literal, `{e}` is an expression
+`e` (E0902 if empty) and `{{` and `}}` are braces (a lone `}` is E0902). The text, as written but
+for those braces, is split at the holes into one part more than there are holes, and the tag is
+called with them in a `const { }` block. With no holes the literal is the tag's value; with holes
+it is `const { tag(&[parts]) }.bind((e1, e2, …,))`: the value's `bind` method is called with a
+tuple of the holes' values, evaluated left to right where the literal is, and its parameter's type
+types them, as for any call. So a hole is a value given to the tag's value, never text spliced into
+the literal: `sql"… WHERE id = {user}"` gives the query and `user` apart. A hole cannot hold a `"`,
+which would end the literal; a `compile_error` (**comptime.error.1**) in such a tag is reported at
+the tag.
 
 **comptime.error.1** `compile_error(message, start, end)`, a prelude function, ends compile-time
 code with an error, reported when compiling with `message` (E1010): at bytes `start` to `end` of

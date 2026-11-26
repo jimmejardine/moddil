@@ -192,6 +192,56 @@ impl Machine<'_> {
             .ok()
     }
 
+    /// `tag"… {e} …"` for a tag `f` taking `&[String]` (`comptime.tag.2`): `f` called with the
+    /// text's parts between the holes, as written but for `{{` and `}}`, and with holes, its
+    /// value's `bind` with a tuple of the holes' values, left to right.
+    pub(super) fn parts_tag(
+        &mut self,
+        f: &FnDef,
+        tok: &SyntaxToken,
+        range: moddil_syntax::TextRange,
+    ) -> Eval {
+        let text = tok.text();
+        let open = text.find('"').expect("a tagged literal");
+        let base = tok.text_range().start as usize + open;
+        let mut parts = Vec::new();
+        let mut holes = Vec::new();
+        let mut cur = String::new();
+        if text[open..].starts_with("\"\"\"") {
+            for line in block_lines(&text[open..]) {
+                if let Some((off, line)) = line {
+                    parts_scan(line, base + off, &mut parts, &mut holes, &mut cur);
+                }
+                cur.push('\n');
+            }
+        } else {
+            let inner = &text[open + 1..text.len() - 1];
+            parts_scan(inner, base + 1, &mut parts, &mut holes, &mut cur);
+        }
+        parts.push(cur);
+        let mut strings = Vec::new();
+        for p in parts {
+            strings.push(self.string_call("from_str", vec![Value::Str(p.into())], range)?);
+        }
+        let array = self.memory.temp(Value::Array(strings));
+        let value = self.invoke(f, vec![Value::Ref(array, false)], HashMap::new(), range)?;
+        if holes.is_empty() {
+            return Ok(value);
+        }
+        let mut values = Vec::new();
+        for (hole, start) in holes {
+            values.push(self.eval(&hole_expr(&hole, start))?);
+        }
+        let head = value.head();
+        let bind = self
+            .program
+            .methods(&head, "bind")
+            .into_iter()
+            .next()
+            .expect("a checked `bind`");
+        self.run_method(bind, &head, vec![value, Value::Tuple(values)], range)
+    }
+
     /// `fmt"…"` (`expr.fmt.1`): the text, and each hole's value written by its `Display`.
     pub(super) fn fmt(&mut self, tok: &SyntaxToken) -> Eval {
         let empty = self.string_call("new", Vec::new(), tok.text_range())?;
@@ -960,6 +1010,51 @@ fn exp_text(f32: bool, bits: u64, digits: Option<u32>, upper: bool) -> String {
 
 /// The expression `text` of a hole that starts at byte `start` of the file, parsed where it
 /// stands so its ranges are the file's.
+/// The parts and holes of `inner`, which starts at byte `at` of the file, of a tag taking
+/// `&[String]` (`comptime.tag.2`): each hole, with where its text starts, ends the part in `cur`.
+fn parts_scan(
+    inner: &str,
+    at: usize,
+    parts: &mut Vec<String>,
+    holes: &mut Vec<(String, usize)>,
+    cur: &mut String,
+) {
+    let inner: Vec<char> = inner.chars().collect();
+    let mut at = at;
+    let mut i = 0;
+    while i < inner.len() {
+        let c = inner[i];
+        if (c == '{' || c == '}') && inner.get(i + 1) == Some(&c) {
+            cur.push(c);
+            i += 2;
+            at += 2;
+            continue;
+        }
+        if c != '{' {
+            cur.push(c);
+            i += 1;
+            at += c.len_utf8();
+            continue;
+        }
+        let mut depth = 0;
+        let mut j = i + 1;
+        while j < inner.len() && !(inner[j] == '}' && depth == 0) {
+            match inner[j] {
+                '{' => depth += 1,
+                '}' => depth -= 1,
+                _ => {}
+            }
+            j += 1;
+        }
+        let hole: String = inner[i + 1..j].iter().collect();
+        let start = at + 1;
+        at = start + hole.len() + 1;
+        holes.push((hole, start));
+        parts.push(std::mem::take(cur));
+        i = j + 1;
+    }
+}
+
 fn hole_expr(text: &str, start: usize) -> ast::Expr {
     let wrapper = "fn f(){(";
     let pad = start.saturating_sub(wrapper.len());
