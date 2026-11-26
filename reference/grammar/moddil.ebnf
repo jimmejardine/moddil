@@ -103,8 +103,9 @@ BLOCK_STRING  ::= %scanner
 # string, as in fmt"…" or sql"""…""". Inside it, '{{' and '}}' are literal braces, and a single
 # '{' opens a hole that runs to its matching '}': the scanner counts nested braces and skips
 # string, raw string and char literals inside the hole, so fmt"Hi {name.or("guest")}" is one
-# token. The tag's comptime parser reads the holes ({expr}, {expr:spec}). Plain strings have no
-# holes.
+# token. fmt reads its holes ({expr}, {expr:spec}), and so does a tag taking &[&str]
+# ({expr}); a tag taking &str reads its braces as text, and the scanner gives its literal as
+# written. Plain strings have no holes.
 TAGGED_STRING ::= %scanner
 TAG           ::= IDENT_TEXT - ( 'r' | 'b' | 'br' )
 

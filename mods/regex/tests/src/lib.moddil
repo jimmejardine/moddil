@@ -133,3 +133,17 @@ test "a re literal is compiled when compiling" {
     ;
     re"^\w+$".is_match("plain_word")  // => true
 }
+
+test "a re literal's named groups are its fields" {
+    let date = re"(?<year>\d{4})-(?<month>\d{2})|(?<never>x)";
+    // Each group is under an alternative, so a match may not have it: each is an `Option`.
+    let d = date.read("on 2026-11 at") ?! "a date";
+    d.year  // => Some("2026")
+    ;
+    d.month  // => Some("11")
+    ;
+    d.never  // => None
+    ;
+    let kv = re"(?<key>\w+)=(?<value>\w*)";
+    (kv.read("size=") ?! "a pair").value  // => ""
+}

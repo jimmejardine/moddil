@@ -34,6 +34,8 @@ int main(void) {
     Point z = moddil_along(-1.0);
     if (z.x != 0.0 || z.y != 0.0 || !moddil_trapped()) return 14;
     if (moddil_gcd(6, 4) != 2 || moddil_trapped()) return 15;
+    size_t n = 10;
+    if (moddil_back(n, 4) != -6) return 16;
     puts("C called Moddil: every result is right");
     return 0;
 }

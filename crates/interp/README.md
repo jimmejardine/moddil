@@ -42,7 +42,9 @@ moddil_interp::run_test(&db, file, index, &mut |range, value| …) // observed v
 ## Used for
 
 - Running programs and tests before any backend exists.
-- **Compile-time evaluation** ([`specs/comptime.md`](../../specs/comptime.md)).
+- **Compile-time evaluation** ([`specs/comptime.md`](../../specs/comptime.md)), and, through the
+  `Evaluator` its [`database()`](src/tags.rs) gives sema, the tags a tagged literal's fields come
+  from (`comptime.tag.fields.2`), each run in a program of its own mod and its dependencies.
 - The **Miri-style `unsafe` checker** ([`specs/unsafe.md`: Checking](../../specs/unsafe.md#checking)).
 - The **playground** ([`specs/toolchain.md`](../../specs/toolchain.md)).
 - A deterministic scheduler for tasks (slice S9), the start of `moddil/runtime-sim`.

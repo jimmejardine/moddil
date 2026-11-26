@@ -1226,7 +1226,9 @@ impl Checker<'_> {
 
 /// Whether a value of number type `from` converts to number type `to` implicitly: `to` holds
 /// every value of `from` exactly (`num.widen.1`). `i32` to `int`, `u8` to `u32`, `u32` to
-/// `int`, `f32` to `f64`, and the integers of up to 32 bits (24 for `f32`) to the floats.
+/// `int`, `f32` to `f64`, and the integers of up to 32 bits (24 for `f32`) to the floats. A
+/// widening to or from `usize` or `isize` holds whatever a pointer's width, 32 or 64 bits: `u32`
+/// to `usize` and `usize` to `u64` widen, `u64` to `usize` does not.
 pub(crate) fn widens(from: &Ty, to: &Ty) -> bool {
     use crate::ty::Num;
     let num = |t: &Ty| match t {
@@ -1240,27 +1242,34 @@ pub(crate) fn widens(from: &Ty, to: &Ty) -> bool {
     if a == b {
         return false;
     }
-    // Whether it is signed, its width, and whether it is a float; `int` is an `i64`.
-    let shape = |n: Option<Num>| match n {
+    // Whether it is signed, its width with pointers `ptr` bits wide, and whether it is a
+    // float; `int` is an `i64`.
+    let shape = |n: Option<Num>, ptr: u32| match n {
         None => (true, 64u32, false),
+        Some(n) if n.is_pointer_sized() => (n.is_signed(), ptr, false),
         Some(n) => (n.is_signed() || n.is_float(), n.bits(), n.is_float()),
     };
-    let ((sa, wa, fa), (sb, wb, fb)) = (shape(a), shape(b));
-    match (fa, fb) {
-        // Float to float: `f32` to `f64`.
-        (true, true) => wa < wb,
-        (true, false) => false,
-        // Integer to float: exact if the mantissa holds every value (24 bits for `f32`, 53
-        // for `f64`, counting the sign).
-        (false, true) => {
-            let mantissa = if wb == 32 { 24 } else { 53 };
-            wa < mantissa
-        }
-        // Integer to integer: signed to wider signed, unsigned to wider unsigned, unsigned to
-        // strictly wider signed.
-        (false, false) => match (sa, sb) {
+    let holds = |ptr: u32| {
+        let ((sa, wa, fa), (sb, wb, fb)) = (shape(a, ptr), shape(b, ptr));
+        match (fa, fb) {
+            // Float to float: `f32` to `f64`.
+            (true, true) => wa < wb,
             (true, false) => false,
-            _ => wa < wb,
-        },
-    }
+            // Integer to float: exact if the mantissa holds every value (24 bits for `f32`,
+            // 53 for `f64`, counting the sign).
+            (false, true) => {
+                let mantissa = if wb == 32 { 24 } else { 53 };
+                wa < mantissa
+            }
+            // Integer to integer: signed to signed and unsigned to unsigned at least as wide
+            // (two types of one width are one of them pointer-sized), unsigned to strictly
+            // wider signed.
+            (false, false) => match (sa, sb) {
+                (true, false) => false,
+                (false, true) => wa < wb,
+                _ => wa <= wb,
+            },
+        }
+    };
+    holds(32) && holds(64)
 }

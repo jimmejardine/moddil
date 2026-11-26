@@ -68,8 +68,11 @@ impl Program {
                 out.push(Method::Code(f.clone(), Some(k)));
             }
         }
-        if let Head::Adt(ty) = head {
-            for d in &self.adts[ty].derives {
+        // A tagged literal's wrapper has no type of its own here (`comptime.tag.fields.1`).
+        if let Head::Adt(ty) = head
+            && let Some(adt) = self.adts.get(ty)
+        {
+            for d in &adt.derives {
                 let provides = matches!(
                     (d.as_str(), name),
                     ("Clone", "clone")

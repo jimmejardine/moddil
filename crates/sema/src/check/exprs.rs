@@ -105,15 +105,8 @@ impl Checker<'_> {
                 for &x in &elements {
                     self.check(x, &elem);
                 }
+                // An array of borrows is a view (`view.infect.1`), as a tuple of them is.
                 let elem = self.norm(&elem);
-                if elem.has_ref() {
-                    self.report(
-                        Code::E0309,
-                        range,
-                        "an array cannot hold a borrow: borrows live only in parameters and locals",
-                    );
-                    return Ty::Error;
-                }
                 Ty::array(elem, Ty::Len(elements.len() as i64))
             }
             ExprKind::Repeat(value, n) => {

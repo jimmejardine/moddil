@@ -125,3 +125,14 @@ struct ParamInfo {
 // evaluated (or at the const or block). Run when the program runs, it traps.
 #[intrinsic]
 fn compile_error(message: &str, start: int, end: int) -> !;
+
+// A tagged literal's value whose literal has fields (`comptime.tag.fields.1`), as a regex's named
+// groups: the literal can `read` a text into a struct with one field each.
+trait TagFields {
+    // The fields, asked for while the program is collected: each one's name, and whether every
+    // reading has it (a `String` field) or may not (an `Option<String>`).
+    fn field_names(&self) -> Vec<(String, bool)>;
+
+    // The fields read from `text`, in `field_names`' order, or `None` if it has none.
+    fn field_values(&self, text: &str) -> Option<Vec<Option<String>>>;
+}

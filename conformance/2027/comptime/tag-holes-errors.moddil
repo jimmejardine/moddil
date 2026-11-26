@@ -1,0 +1,41 @@
+// covers: comptime.tag.2
+
+struct Query {
+    parts: int,
+}
+
+#[tag]
+const fn q(parts: &[&str]) -> Query {
+    Query { parts: parts.len() }
+}
+
+impl Query {
+    fn bind(self, args: (&str, int)) -> int {
+        args.1
+    }
+}
+
+#[tag]
+const fn number(n: int) -> int {
+    n
+}
+
+fn wrong_types() -> int {
+    q"{1} and {2}"  //~ E0201
+}
+
+fn lone_brace() -> Query {
+    q"a } b"  //~ E0902
+}
+
+fn empty_hole() -> int {
+    q"{} and {1}"  //~ E0902
+}
+
+fn unknown_name() -> int {
+    q"{nope} and {1}"  //~ E0101
+}
+
+fn not_text() -> int {
+    number"1"  //~ E1011
+}

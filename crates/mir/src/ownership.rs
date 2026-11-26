@@ -717,7 +717,12 @@ impl<'a> Checker<'a> {
                             self.access((at, span), p, Access::Read, h, m, None);
                         }
                     }
-                    Rvalue::Unary(_, a) | Rvalue::NegOverflows(a) | Rvalue::Repeat(a, _) => {
+                    Rvalue::Unary(_, a) | Rvalue::NegOverflows(a) => {
+                        self.operand(at, span, a, h, m, check);
+                    }
+                    // `[r; n]` holds the loans of `r`, each copy of it (`view.borrow.1`).
+                    Rvalue::Repeat(a, _) => {
+                        flowing.extend(self.flows(a, h));
                         self.operand(at, span, a, h, m, check);
                     }
                     Rvalue::Binary(_, a, b2) | Rvalue::Overflows(_, a, b2) => {

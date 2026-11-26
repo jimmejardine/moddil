@@ -50,11 +50,47 @@ steps, is an error at the const (E1004).
 
 **comptime.tag.1** A **tagged literal** `name"…"` (or a `name"""` block) whose tag is not `fmt`
 calls `name`, a `const fn` marked `#[tag]` in scope taking a `&str`, with the literal's text as
-written: as a raw string's, its `\` kept (a block dedented as a raw block is), and with no holes.
-The call is a `const { }` block (**comptime.block.2**): computed when compiling, so its value is
-static data, and an error in it is a compile error. A tag that is not such a function in scope is
-an error (E1011). The `moddil/regex` mod's `re` is one: `re"^\d+$"` is a `Regex` compiled when
-compiling.
+written: as a raw string's, its `\` kept (a block dedented as a raw block is), and with no holes:
+its braces are text. The call is a `const { }` block (**comptime.block.2**): computed when
+compiling, so its value is static data, and an error in it is a compile error. A tag that is not
+such a function in scope, or that takes anything but one `&str` or one `&[&str]`
+(**comptime.tag.2**), is an error (E1011). The `moddil/regex` mod's `re` is one: `re"^\d+$"` is a
+`Regex` compiled when compiling.
+
+**comptime.tag.2** A tag taking `&[&str]` has **holes**: in its literal, `{e}` is an expression
+`e` (E0902 if empty) and `{{` and `}}` are braces (a lone `}` is E0902). The text, as written but
+for those braces, is split at the holes into one part more than there are holes, and the tag is
+called with them in a `const { }` block. With no holes the literal is the tag's value; with holes
+it is `const { tag(&[parts]) }.bind((e1, e2, …,))`: the value's `bind` method is called with a
+tuple of the holes' values, evaluated left to right where the literal is, and its parameter's type
+types them, as for any call. So a hole is a value given to the tag's value, never text spliced into
+the literal: `sql"… WHERE id = {user}"` gives the query and `user` apart. A hole cannot hold a `"`,
+which would end the literal; a `compile_error` (**comptime.error.1**) in such a tag is reported at
+the tag.
+
+**comptime.tag.fields.1** A tagged literal whose tag takes a `&str` and gives a value that
+implements the prelude's `TagFields` has **fields**: one for each name its value's
+`field_names()` gives, a `String` if that name's flag says every reading has it, or else an
+`Option<String>`. The literal is then its value in a wrapper that dereferences to it, so its own
+methods are the value's, and that has `read(text: &str)`: an `Option` of a struct with those
+fields, whose values are the value's `field_values(text)`, `None` if that is `None`. A field every
+reading has that a reading lacks traps. The wrapper and the struct are hidden types, which no code
+can name. The `moddil/regex` mod's `Regex` implements it, a field for each named group:
+
+```rust
+let date = re"(?<year>\d{4})-(?<month>\d{2})(-(?<day>\d{2}))?";
+let d = date.read("2026-11") ?! "a date";
+d.year                     // => "2026"
+d.day                      // => None
+```
+
+**comptime.tag.fields.2** A literal's fields are known before its program's bodies are checked,
+so its tag's `field_names()` is called while the program is collected: on the literal's text, in
+a program of only the tag's mod and the mods it depends on. So a tag whose value implements
+`TagFields` must come from another mod than the literal (E1012); and the field names must be
+distinct names, as a struct's fields are (E1012). Evaluating it is compile-time code as any other:
+a `compile_error` in it is reported in the literal's text (**comptime.error.1**, E1010), and a
+trap, or running out of fuel, is E1004.
 
 **comptime.error.1** `compile_error(message, start, end)`, a prelude function, ends compile-time
 code with an error, reported when compiling with `message` (E1010): at bytes `start` to `end` of

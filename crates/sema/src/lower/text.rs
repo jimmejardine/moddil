@@ -6,7 +6,7 @@ use moddil_syntax::{SyntaxKind as K, SyntaxToken, TextRange};
 
 use super::Lowerer;
 use crate::hir::{Align, ExprId, ExprKind, FmtPiece, Radix, Spec};
-use crate::{Code, Diagnostic};
+use crate::{Code, Diagnostic, Ty};
 
 /// The text of a string literal token, or why it is not one.
 pub(crate) fn string_value(tok: &str) -> Result<String, String> {
@@ -289,7 +289,8 @@ impl Lowerer<'_> {
 
     /// `tag"…"` for a tag other than `fmt` (`comptime.tag.1`): a call of the `#[tag]` function
     /// `tag` in scope with the literal's text, in a `const { }` block, so it runs when
-    /// compiling.
+    /// compiling. A tag taking `&[&str]` has holes (`comptime.tag.2`): it is called with the
+    /// text's parts between them, and its value's `bind` with the holes' values.
     fn tag_call(&mut self, tag: &str, lit: &str, range: TextRange) -> ExprId {
         let f = match self
             .types
@@ -312,6 +313,25 @@ impl Lowerer<'_> {
                 return self.missing(range);
             }
         };
+        let parts = match self.items.fns[f as usize].params.as_slice() {
+            [p] if is_str_ref(&p.ty) => false,
+            [p] if matches!(&p.ty, Ty::Ref(false, t)
+                if matches!(&**t, Ty::Slice(e) if is_str_ref(e))) =>
+            {
+                true
+            }
+            _ => {
+                self.report(
+                    Code::E1011,
+                    range,
+                    format!("`{tag}` is a `#[tag]` function, but takes one `&str` or `&[&str]`"),
+                );
+                return self.missing(range);
+            }
+        };
+        if parts {
+            return self.parts_call(f, tag, lit, range);
+        }
         // As written, as a raw string's text (`comptime.tag.1`).
         let text = match string_value(&format!("r{lit}")) {
             Ok(t) => t,
@@ -340,7 +360,173 @@ impl Lowerer<'_> {
         let quotes = if lit.starts_with("\"\"\"") { 3 } else { 1 };
         let at = (tag.len() + quotes) as u32;
         self.out.body.tagged.insert(block, at);
+        // A literal with fields is its value in the wrapper that reads them
+        // (`comptime.tag.fields.1`).
+        let (_, make) = crate::collect::wrapper_names(range);
+        if let Some(crate::Def::Fn(w)) =
+            self.types
+                .tree
+                .lookup(self.types.module, &make, self.types.prelude_first)
+        {
+            // Its type parameter, the value's type, inferred.
+            let callee = self.alloc(
+                ExprKind::Fn {
+                    func: w,
+                    args: vec![Ty::Infer(Ty::HOLE)],
+                },
+                range,
+            );
+            return self.alloc(
+                ExprKind::Call {
+                    callee,
+                    args: vec![block],
+                },
+                range,
+            );
+        }
         block
+    }
+
+    /// `tag"… {e} …"` for a tag taking `&[&str]` (`comptime.tag.2`): `const { tag(&[parts]) }`,
+    /// and with holes, its value's `bind((e, …,))`. The text is as written, but `{{` and `}}`
+    /// are braces.
+    fn parts_call(&mut self, f: u32, tag: &str, lit: &str, range: TextRange) -> ExprId {
+        let start = range.start as usize + tag.len();
+        let mut parts = Vec::new();
+        let mut holes = Vec::new();
+        let mut cur = String::new();
+        if lit.starts_with("\"\"\"") {
+            let lines = match block_lines(lit) {
+                Ok(lines) => lines,
+                Err(why) => {
+                    let at = match block_error_at(lit) {
+                        Some((a, b)) => TextRange::new((start + a) as u32, (start + b) as u32),
+                        None => range,
+                    };
+                    self.report(Code::E0902, at, why);
+                    return self.missing(range);
+                }
+            };
+            for line in lines {
+                if let Some((off, text)) = line
+                    && !self.parts_scan(text, start + off, &mut parts, &mut holes, &mut cur)
+                {
+                    return self.missing(range);
+                }
+                cur.push('\n');
+            }
+        } else {
+            let inner = &lit[1..lit.len() - 1];
+            if !self.parts_scan(inner, start + 1, &mut parts, &mut holes, &mut cur) {
+                return self.missing(range);
+            }
+        }
+        parts.push(cur);
+        // With holes, the `const { }` block is at the tag's name: the holes and the `bind` call
+        // run where the literal is, not when compiling, and compile-time code is found by range.
+        let whole = range;
+        let range = if holes.is_empty() {
+            range
+        } else {
+            TextRange::new(range.start, range.start + tag.len() as u32)
+        };
+        let elems = parts
+            .into_iter()
+            .map(|t| self.alloc(ExprKind::Str(t), range))
+            .collect();
+        let array = self.alloc(ExprKind::Array(elems), range);
+        let arg = self.alloc(
+            ExprKind::Ref {
+                mutable: false,
+                expr: array,
+            },
+            range,
+        );
+        let callee = self.alloc(
+            ExprKind::Fn {
+                func: f,
+                args: Vec::new(),
+            },
+            range,
+        );
+        let call = self.alloc(
+            ExprKind::Call {
+                callee,
+                args: vec![arg],
+            },
+            range,
+        );
+        let block = self.alloc(ExprKind::ConstBlock(call), range);
+        if holes.is_empty() {
+            return block;
+        }
+        let values = self.alloc(ExprKind::Tuple(holes), whole);
+        self.alloc(
+            ExprKind::MethodCall {
+                receiver: block,
+                name: "bind".to_string(),
+                name_range: whole,
+                generic_args: None,
+                args: vec![values],
+            },
+            whole,
+        )
+    }
+
+    /// The parts and holes of `inner`, which starts at byte `start` of the file, for a tag taking
+    /// `&[&str]`: each hole ends the part in `cur`; false, with an error, if a hole is bad.
+    fn parts_scan(
+        &mut self,
+        inner: &str,
+        start: usize,
+        parts: &mut Vec<String>,
+        holes: &mut Vec<ExprId>,
+        cur: &mut String,
+    ) -> bool {
+        let chars: Vec<char> = inner.chars().collect();
+        let mut i = 0;
+        let mut offset = 0;
+        while i < chars.len() {
+            match chars[i] {
+                c @ ('{' | '}') if chars.get(i + 1) == Some(&c) => {
+                    cur.push(c);
+                    i += 2;
+                    offset += 2;
+                }
+                '}' => {
+                    let at = (start + offset) as u32;
+                    self.report(
+                        Code::E0902,
+                        TextRange::new(at, at + 1),
+                        "a `}` in a tagged literal with holes is written `}}`",
+                    );
+                    return false;
+                }
+                '{' => {
+                    let end = hole_end(&chars, i + 1);
+                    let hole: String = chars[i + 1..end].iter().collect();
+                    let hole_start = start + offset + 1;
+                    let at = TextRange::new(hole_start as u32, (hole_start + hole.len()) as u32);
+                    match self.hole(&hole, hole_start, at) {
+                        Some(e) => holes.push(e),
+                        None => return false,
+                    }
+                    parts.push(std::mem::take(cur));
+                    let taken: usize = chars[i..=end.min(chars.len() - 1)]
+                        .iter()
+                        .map(|c| c.len_utf8())
+                        .sum();
+                    offset += taken;
+                    i = end + 1;
+                }
+                c => {
+                    cur.push(c);
+                    offset += c.len_utf8();
+                    i += 1;
+                }
+            }
+        }
+        true
     }
 
     /// The text and holes of `inner`, which starts at byte `start` of the file, onto `pieces`,
@@ -423,8 +609,8 @@ impl Lowerer<'_> {
         true
     }
 
-    /// The expression of a `fmt` hole whose text starts at byte `at` of the file, parsed where it
-    /// stands so its ranges are the file's.
+    /// The expression of a hole (of `fmt`, or of a tag taking `&[&str]`) whose text starts at
+    /// byte `at` of the file, parsed where it stands so its ranges are the file's.
     fn hole(&mut self, text: &str, at: usize, range: TextRange) -> Option<ExprId> {
         let wrapper = "fn f(){(";
         if at < wrapper.len() {
@@ -446,11 +632,7 @@ impl Lowerer<'_> {
         match expr {
             Some(e) if !text.trim().is_empty() => Some(self.expr(&e)),
             _ => {
-                self.report(
-                    Code::E0902,
-                    range,
-                    "a `fmt` hole holds an expression: `{x}`",
-                );
+                self.report(Code::E0902, range, "a hole holds an expression: `{x}`");
                 None
             }
         }
@@ -609,4 +791,9 @@ fn parse_spec(text: &str) -> Result<(Spec, [Named; 2]), String> {
         return Err(bad());
     }
     Ok((spec, [width_name, precision_name]))
+}
+
+/// Whether `t` is `&str`.
+fn is_str_ref(t: &Ty) -> bool {
+    matches!(t, Ty::Ref(false, s) if **s == Ty::Str)
 }

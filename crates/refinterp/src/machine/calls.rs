@@ -1255,6 +1255,22 @@ impl Machine<'_> {
             }
         };
         let value = self.memory.load(&place);
+        // A tagged literal's `read` (`comptime.tag.fields.1`).
+        if name == "read" {
+            let mut w = place.clone();
+            let mut v = value.clone();
+            while let Value::Ref(q, _) = &v {
+                w = q.clone();
+                v = self.memory.load(&w);
+            }
+            if let Value::Adt { ty, variant, .. } = &v
+                && ty == super::fields::WRAPPER
+            {
+                let spec = variant.clone();
+                let text = self.eval(&args[0])?;
+                return self.read_fields(&w, &spec, text, range);
+            }
+        }
         // An anonymous impl's method is its closure; one it leaves out, the trait's default.
         if let Value::Anon(tr, methods) = self.target(value.clone()) {
             let values = self.eval_all(&args)?;

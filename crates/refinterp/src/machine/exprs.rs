@@ -34,12 +34,26 @@ impl Machine<'_> {
                             unreachable!("a checked tag")
                         };
                         let f = self.program.fns[&k].clone();
-                        self.invoke(
+                        // A tag taking `&[&str]` has holes (`comptime.tag.2`).
+                        let parts = f
+                            .node
+                            .params()
+                            .and_then(|l| l.params().next())
+                            .and_then(|p| p.ty())
+                            .is_some_and(|t| {
+                                t.syntax().text().to_string().replace(' ', "") == "&[&str]"
+                            });
+                        if parts {
+                            return self.parts_tag(&f, &tok, range);
+                        }
+                        let v = self.invoke(
                             &f,
                             vec![Value::Str(value.into())],
                             std::collections::HashMap::new(),
                             range,
-                        )
+                        )?;
+                        // With fields, if its value has them (`comptime.tag.fields.1`).
+                        self.with_fields(v, range)
                     }
                     None => Ok(literal(node, false)),
                 }

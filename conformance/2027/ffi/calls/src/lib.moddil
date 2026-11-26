@@ -6,10 +6,10 @@ extern "C" {
     fn abs(x: i32) -> i32;
     fn llabs(x: int) -> int;
     fn fabs(x: f64) -> f64;
-    fn strlen(s: *const u8) -> u64;
-    fn memcpy(dst: *mut u8, src: *const Pair, n: u64) -> *mut u8;
-    fn qsort(base: *mut (), n: u64, size: u64, cmp: fn(*const (), *const ()) -> i32);
-    fn bsearch(key: *const (), base: *const (), n: u64, size: u64, cmp: fn(*const (), *const ()) -> i32) -> *const ();
+    fn strlen(s: *const u8) -> usize;
+    fn memcpy(dst: *mut u8, src: *const Pair, n: usize) -> *mut u8;
+    fn qsort(base: *mut (), n: usize, size: usize, cmp: fn(*const (), *const ()) -> i32);
+    fn bsearch(key: *const (), base: *const (), n: usize, size: usize, cmp: fn(*const (), *const ()) -> i32) -> *const ();
     fn div(numer: i32, denom: i32) -> Div;
     fn lldiv(numer: int, denom: int) -> LongDiv;
     fn getenv(name: *const u8) -> *const u8;

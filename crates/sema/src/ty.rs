@@ -145,11 +145,15 @@ pub enum Num {
     F32,
     /// `f64`.
     F64,
+    /// `isize`: a signed integer as wide as a pointer (`num.types.2`).
+    Isize,
+    /// `usize`: an unsigned integer as wide as a pointer (`num.types.2`).
+    Usize,
 }
 
 impl Num {
     /// Every one, in order.
-    pub const ALL: [Num; 11] = [
+    pub const ALL: [Num; 13] = [
         Num::I8,
         Num::I16,
         Num::I32,
@@ -161,6 +165,8 @@ impl Num {
         Num::U128,
         Num::F32,
         Num::F64,
+        Num::Isize,
+        Num::Usize,
     ];
 
     /// How it is written.
@@ -177,6 +183,8 @@ impl Num {
             Num::U128 => "u128",
             Num::F32 => "f32",
             Num::F64 => "f64",
+            Num::Isize => "isize",
+            Num::Usize => "usize",
         }
     }
 
@@ -192,16 +200,21 @@ impl Num {
 
     /// Whether it is a signed integer.
     pub fn is_signed(self) -> bool {
-        matches!(self, Num::I8 | Num::I16 | Num::I32 | Num::I128)
+        matches!(self, Num::I8 | Num::I16 | Num::I32 | Num::I128 | Num::Isize)
     }
 
-    /// Its width in bits.
+    /// Whether it is `usize` or `isize`, as wide as a pointer on the target (`num.types.2`).
+    pub fn is_pointer_sized(self) -> bool {
+        matches!(self, Num::Isize | Num::Usize)
+    }
+
+    /// Its width in bits: a pointer's is 64 on every target of this edition.
     pub fn bits(self) -> u32 {
         match self {
             Num::I8 | Num::U8 => 8,
             Num::I16 | Num::U16 => 16,
             Num::I32 | Num::U32 | Num::F32 => 32,
-            Num::U64 | Num::F64 => 64,
+            Num::U64 | Num::F64 | Num::Isize | Num::Usize => 64,
             Num::I128 | Num::U128 => 128,
         }
     }
@@ -216,7 +229,8 @@ impl Num {
             Num::U8 => (0, u8::MAX.into()),
             Num::U16 => (0, u16::MAX.into()),
             Num::U32 => (0, u32::MAX.into()),
-            Num::U64 => (0, u64::MAX.into()),
+            Num::U64 | Num::Usize => (0, u64::MAX.into()),
+            Num::Isize => (i64::MIN.into(), i64::MAX.into()),
             Num::U128 | Num::F32 | Num::F64 => (0, i128::MAX),
         }
     }

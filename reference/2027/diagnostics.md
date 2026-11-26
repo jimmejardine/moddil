@@ -117,7 +117,7 @@ and a code never changes meaning.
 | E0416 | `#[derive(Default)]` on an enum without one `#[default]` unit variant | [attr.derive.default.1](attributes.md) |
 | E0417 | `.clone()` written on an `Rc` or a `Weak`, which is `.share()` | [rc.clone.1](rc.md) |
 | E0901 | `str` or a slice named where it would need a size | [text.str.2](text.md), [type.slice.1](types.md) |
-| E0902 | An invalid literal: a `fmt` hole without an expression, or a block literal's line indented wrongly | [expr.fmt.2](text.md), [text.lit.block.1](text.md) |
+| E0902 | An invalid literal: a `fmt` hole, or a tag's, without an expression, a lone `}` in a tag's literal with holes, or a block literal's line indented wrongly | [expr.fmt.2](text.md), [text.lit.block.1](text.md), [comptime.tag.2](comptime.md) |
 | E1001 | Compile-time code calling a function that is not a `const fn` | [comptime.const-fn.2](comptime.md), [attr.around.args.1](attributes.md) |
 | E1002 | Compile-time code with an effect or an error | [comptime.const-fn.2](comptime.md) |
 | E1003 | A const whose type holds a `&mut` borrow, a view, or a borrow of a value holding one | [comptime.static.3](comptime.md) |
@@ -128,7 +128,8 @@ and a code never changes meaning.
 | E1008 | A const whose value cannot be static data: a closure, a `dyn` value, or a C pointer or function pointer | [comptime.static.2](comptime.md) |
 | E1009 | A const that is not `Copy` used by value, a move of static data | [comptime.static.2](comptime.md) |
 | E1010 | An error compile-time code reported with `compile_error` | [comptime.error.1](comptime.md) |
-| E1011 | A tagged literal whose tag is not a `#[tag]` `const fn` in scope | [comptime.tag.1](comptime.md) |
+| E1011 | A tagged literal whose tag is not a `#[tag]` `const fn` in scope taking a `&str` or a `&[&str]` | [comptime.tag.1](comptime.md), [comptime.tag.2](comptime.md) |
+| E1012 | A tagged literal whose fields cannot be: its tag is in the literal's own mod, or the names are not distinct field names | [comptime.tag.fields.2](comptime.md) |
 | E1101 | A literal its refined type's predicate does not hold for | [refine.lit.1](refinements.md) |
 | E1102 | A contract that is not pure | [contract.2](contracts.md) |
 | E1103 | `old(e)` of a value that is not `Copy`, or with other than one value | [contract.old.1](contracts.md) |

@@ -73,6 +73,10 @@ fn c_calls_the_library(static_lib: bool) {
         "{header}"
     );
     assert!(header.contains("int32_t moddil_trapped(void);"), "{header}");
+    assert!(
+        header.contains("ptrdiff_t moddil_back(size_t n, size_t end);"),
+        "{header}"
+    );
     // The C program, compiled and linked against the library.
     let t = target();
     let cc = cc::Build::new()

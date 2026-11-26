@@ -1,0 +1,52 @@
+// covers: comptime.tag.2
+
+struct Query {
+    parts: Vec<String>,
+}
+
+// A tag with holes: it takes the literal's text, split at its holes.
+#[tag]
+const fn q(parts: &[&str]) -> Query {
+    let mut out = Vec::new();
+    for p in parts {
+        out.push(p.to_string());
+    }
+    Query { parts: out }
+}
+
+impl Query {
+    // The text with `?n` for each hole, then the holes' values: never spliced into the text.
+    fn bind(self, args: (&str, int)) -> String {
+        let (name, age) = args;
+        fmt"{self.parts[0]}?1{self.parts[1]}?2{self.parts[2]} [{name}, {age}]"
+    }
+}
+
+struct Count {
+    parts: int,
+}
+
+#[tag]
+const fn count(parts: &[&str]) -> Count {
+    Count { parts: parts.len() }
+}
+
+impl Count {
+    fn bind(self, args: (int,)) -> int {
+        self.parts * 100 + args.0
+    }
+}
+
+test "holes are values the tag's value binds" {
+    let name = "ada";
+    let age = 36;
+    q"name = {name} and age > {age}"  // => "name = ?1 and age > ?2 [ada, 36]"
+    ;
+    count"a {3 + 4} b"  // => 207
+}
+
+test "a literal with no holes is the tag's value" {
+    q"no holes".parts.len()  // => 1
+    ;
+    q"{{x}}".parts[0].clone()  // => "{x}"
+}

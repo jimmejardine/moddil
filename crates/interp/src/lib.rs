@@ -22,9 +22,11 @@ mod num;
 mod ops;
 mod sched;
 mod stack;
+mod tags;
 mod texts;
 
 pub use frozen::{Frozen, FrozenValue};
+pub use tags::{TagEvaluator, database};
 mod value;
 
 use moddil_mir::TrapClass;

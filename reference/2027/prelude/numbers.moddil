@@ -7,7 +7,7 @@
 // Each impl is written once, as a template that `#[derive_for]` makes for each type it lists
 // (`comptime.derive.for.1`). The integers' arithmetic is `#[track_caller]`, as it can trap.
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize, f32, f64)]
 const fn number_clone(t: type) -> Impl<Clone> {
     impl Clone for t {
         fn clone(&self) -> t {
@@ -16,12 +16,12 @@ const fn number_clone(t: type) -> Impl<Clone> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize, f32, f64)]
 const fn number_copy(t: type) -> Impl<Copy> {
     impl Copy for t {}
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize, f32, f64)]
 const fn number_partial_eq(t: type) -> Impl<PartialEq> {
     impl PartialEq for t {
         fn eq(&self, other: &t) -> bool {
@@ -30,7 +30,7 @@ const fn number_partial_eq(t: type) -> Impl<PartialEq> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize, f32, f64)]
 const fn number_partial_ord(t: type) -> Impl<PartialOrd> {
     impl PartialOrd for t {
         fn partial_cmp(&self, other: &t) -> Option<Ordering> {
@@ -55,12 +55,12 @@ const fn number_partial_ord(t: type) -> Impl<PartialOrd> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize)]
 const fn int_eq(t: type) -> Impl<Eq> {
     impl Eq for t {}
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize)]
 const fn int_ord(t: type) -> Impl<Ord> {
     impl Ord for t {
         fn cmp(&self, other: &t) -> Ordering {
@@ -69,7 +69,7 @@ const fn int_ord(t: type) -> Impl<Ord> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize)]
 const fn int_add(t: type) -> Impl<Add> {
     impl Add for t {
         type Output = t;
@@ -90,7 +90,7 @@ const fn float_add(t: type) -> Impl<Add> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize)]
 const fn int_sub(t: type) -> Impl<Sub> {
     impl Sub for t {
         type Output = t;
@@ -111,7 +111,7 @@ const fn float_sub(t: type) -> Impl<Sub> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize)]
 const fn int_mul(t: type) -> Impl<Mul> {
     impl Mul for t {
         type Output = t;
@@ -132,7 +132,7 @@ const fn float_mul(t: type) -> Impl<Mul> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize)]
 const fn int_div(t: type) -> Impl<Div> {
     impl Div for t {
         type Output = t;
@@ -153,7 +153,7 @@ const fn float_div(t: type) -> Impl<Div> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize)]
 const fn int_rem(t: type) -> Impl<Rem> {
     impl Rem for t {
         type Output = t;
@@ -174,7 +174,7 @@ const fn float_rem(t: type) -> Impl<Rem> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128)]
+#[derive_for(i8, i16, i32, i128, isize)]
 const fn int_neg(t: type) -> Impl<Neg> {
     impl Neg for t {
         type Output = t;
@@ -195,7 +195,7 @@ const fn float_neg(t: type) -> Impl<Neg> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize)]
 const fn int_not(t: type) -> Impl<Not> {
     impl Not for t {
         type Output = t;
@@ -205,7 +205,7 @@ const fn int_not(t: type) -> Impl<Not> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize, f32, f64)]
 const fn number_display(t: type) -> Impl<Display> {
     impl Display for t {
         fn fmt(&self, out: &mut dyn TextWrite) {
@@ -214,7 +214,7 @@ const fn number_display(t: type) -> Impl<Display> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize, f32, f64)]
 const fn number_debug(t: type) -> Impl<Debug> {
     impl Debug for t {
         fn fmt(&self, out: &mut dyn TextWrite) {
@@ -223,7 +223,7 @@ const fn number_debug(t: type) -> Impl<Debug> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize)]
 const fn int_default(t: type) -> Impl<Default> {
     impl Default for t {
         fn default() -> t {
@@ -241,7 +241,7 @@ const fn float_default(t: type) -> Impl<Default> {
     }
 }
 
-#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize, f32, f64)]
 const fn number_marker(t: type) -> Impl<Number> {
     impl Number for t {}
 }
@@ -254,7 +254,7 @@ trait RadixText {
     fn write_radix(&self, out: &mut dyn TextWrite, bits: int, upper: bool, prefix: bool);
 }
 
-#[derive_for(int, i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+#[derive_for(int, i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize)]
 const fn int_radix(t: type) -> Impl<RadixText> {
     impl RadixText for t {
         fn write_radix(&self, out: &mut dyn TextWrite, bits: int, upper: bool, prefix: bool) {

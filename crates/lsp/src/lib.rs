@@ -113,9 +113,12 @@ fn root_of(file: &Path) -> PathBuf {
 }
 
 impl Analysis {
-    /// No programs yet.
+    /// No programs yet. Its tags give their literals fields (`comptime.tag.fields.2`).
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            db: moddil_interp::database(),
+            ..Self::default()
+        }
     }
 
     /// The root and file index of `path`, loading its program the first time.

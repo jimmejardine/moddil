@@ -45,7 +45,10 @@ Units of measure are in [`units.md`](units.md).
 - **`int` is i64 on every target**. It is the type of lengths, indices and counts, and the default
   for an integer literal with no other constraint.
 - `usize` and `isize` exist only for FFI and memory-level code (allocators, pointer arithmetic in
-  `unsafe`), and a lint flags them in cross-target code ([`determinism.md`: Sources of nondeterminism](determinism.md#sources-of-nondeterminism)).
+  `unsafe`; C's `size_t` and `ptrdiff_t`). They are as wide as a pointer: 64 bits on every target
+  today, with 32 bits on wasm32 to come. Their implicit widenings are only those that hold at any
+  width (`u32` to `usize`, `usize` to `u64`), so code that compiles keeps compiling when a 32-bit
+  target arrives. A lint flags them in cross-target code ([`determinism.md`: Sources of nondeterminism](determinism.md#sources-of-nondeterminism)).
 - **Arbitrary widths** such as `u3` and `i24`, as in Zig ([`freestanding.md`: Hardware access](freestanding.md#hardware-access)).
   They give exact ranges as types (a `u3` holds 0 to 7 and traps beyond it) and bit-packed
   registers, packets and compact state without hand-written masks. Decided (November 2026):

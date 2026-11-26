@@ -44,7 +44,7 @@ changes:
 | Query | Result |
 |---|---|
 | `parse(file)` | The lossless syntax tree |
-| `item_tree(file)` | The functions, tests, structs and enums, with their signatures |
+| `item_tree(file)` | The functions, tests, structs and enums, with their signatures. A program with tagged literals whose tag's value implements `TagFields` is collected twice: first without their hidden items, to find each tag and call it through the database's `Evaluator` (`comptime.tag.fields.2`, `collect/tags.rs`), then with them |
 | `body(owner)` | A function's or test's body in HIR, with names resolved and sugar removed |
 | `infer(owner)` | The types of the body's expressions, patterns and locals; type errors; exhaustiveness (Maranget's usefulness algorithm, with integer ranges split at their bounds) |
 | `diagnostics(file)` | Everything wrong with the file, in source order (only syntax errors if there are any) |

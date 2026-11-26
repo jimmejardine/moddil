@@ -275,8 +275,11 @@ codes! {
     /// An error compile-time code reported with `compile_error`, where it said.
     E1010 = "error from compile-time code",
     /// A tagged literal whose tag is not a `#[tag]` function in scope, or a `#[tag]` that is not
-    /// a `const fn` taking one `&str`.
+    /// a `const fn` taking one `&str` or `&[&str]`.
     E1011 = "invalid tag",
+    /// A tagged literal whose fields cannot be (`comptime.tag.fields.2`): its tag is in the
+    /// literal's own mod, or its fields' names are not distinct names.
+    E1012 = "invalid tag fields",
     /// A literal that its refined type's predicate does not hold for.
     E1101 = "literal outside its refinement",
     /// A contract that is not pure: it has an effect, an error or an assignment.

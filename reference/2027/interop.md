@@ -12,7 +12,7 @@ allowed only inside an `unsafe` block (E0218): nothing checks what C does.
 
 **ffi.types.1** A C function's, and an `#[export]` function's, parameters and result have **C's
 types** (E0222 otherwise): the sized numbers but the 128-bit ones (`i8` as `int8_t`, … `f64` as
-`double`), `int` (`int64_t`), `bool` (C's `bool`), and raw pointers (`*const T` as `const T *`,
+`double`), `usize` and `isize` (`size_t` and `ptrdiff_t`), `int` (`int64_t`), `bool` (C's `bool`), and raw pointers (`*const T` as `const T *`,
 `*mut T` as `T *`), to anything; a result may also be `()` (`void`). A struct crosses behind a
 pointer, or by value (**ffi.types.2**). Neither kind of function needs handlers, can fail, or
 suspends or spawns (E0222).

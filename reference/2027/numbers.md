@@ -19,6 +19,12 @@ its name says on every target. The float types are `f32` and `f64`, IEEE 754's b
 binary64. Each is `Copy`, and has `Clone`, `PartialEq`, `PartialOrd`, `Display`, `Debug` and
 `Default` (zero); the integers are also `Eq` and `Ord`, the floats not, as NaN is unordered.
 
+**num.types.2** `usize` (unsigned) and `isize` (signed) are integers as wide as a pointer on the
+target: 64 bits on every target of this edition. They are for memory-level code and C's `size_t`
+and `ptrdiff_t` (**ffi.types.1**); `int` is the type of counts, lengths and indices. They have
+everything **num.types.1** gives the other integers, and their own conversions
+(**num.convert.1**).
+
 **num.lit.1** A literal, and an operator whose operands are all literals (or such operations,
 in parentheses), is an exact number until it gets a type, so `200 + 100` is `300` and `0.1 * 3.0`
 is `0.3` exactly; a shift, a quotient of fractional literals, and anything that would overflow
@@ -60,8 +66,12 @@ overflow.
 **num.widen.1** A number converts implicitly where a number of another type is expected only if
 that type holds every value of its own exactly: a signed integer to a wider signed one, an unsigned
 integer to a wider unsigned or a strictly wider signed one, `f32` to `f64`, and an integer to a
-float whose significand holds it (up to 16 bits for `f32`, 32 for `f64`). Every other conversion
-is written (**num.convert.1**); there is no `as`.
+float whose significand holds it (up to 16 bits for `f32`, 32 for `f64`). A conversion to or from
+`usize` or `isize` is implicit only if it holds whatever a pointer's width, 32 or 64 bits: `u8`,
+`u16` and `u32` to `usize`, `usize` to `u64`, `u128` and `i128`; `i8`, `i16`, `i32`, `u8` and
+`u16` to `isize`, and `isize` to `int` and `i128`. So `u64` to `usize`, `int` to `isize`,
+`usize` to `int`, and either to the other or to a float are written. Every other conversion is
+written (**num.convert.1**); there is no `as`.
 
 **num.convert.1** On every number type, with `T` a number type: `x.to::<T>()` is `x` as a `T`,
 failing with the prelude's `RangeError` if `x` is not one exactly (an integer outside `T`'s range,
