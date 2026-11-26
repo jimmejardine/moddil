@@ -1,0 +1,22 @@
+// covers: num.types.2, num.widen.1
+
+// A widening must hold whatever a pointer's width: a `usize` may be 32 bits.
+fn from_u64(n: u64) -> usize {
+    n  //~ E0201
+}
+
+fn from_int(n: int) -> isize {
+    n  //~ E0201
+}
+
+fn to_int(n: usize) -> int {
+    n  //~ E0201
+}
+
+fn between(n: usize) -> isize {
+    n  //~ E0201
+}
+
+fn below_zero() {
+    let n: usize = -1;  //~ E0204
+}

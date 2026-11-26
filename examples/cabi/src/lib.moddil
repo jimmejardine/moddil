@@ -32,6 +32,14 @@ pub fn moddil_is_even(n: u8) -> bool {
     n % 2 == 0
 }
 
+/// How far `n` bytes are from `end`, back: C's `size_t` in, its `ptrdiff_t` out
+/// (`num.types.2`).
+#[export]
+pub fn moddil_back(n: usize, end: usize) -> isize {
+    let d = end.wrap::<isize>() - n.wrap::<isize>();
+    d
+}
+
 /// How far apart the points at `a` and `b` are.
 #[export]
 pub fn moddil_distance(a: *const Point, b: *const Point) -> f64 {

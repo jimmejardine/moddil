@@ -72,6 +72,8 @@ fn number(n: Num) -> Option<(&'static str, &'static str, char, u8)> {
         Num::U64 => ("u64", "uint64_t", 'u', 8),
         Num::F32 => ("f32", "float", 'f', 4),
         Num::F64 => ("f64", "double", 'f', 8),
+        Num::Usize => ("usize", "size_t", 'u', 8),
+        Num::Isize => ("isize", "ptrdiff_t", 'i', 8),
         Num::I128 | Num::U128 => return None,
     })
 }

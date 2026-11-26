@@ -29,6 +29,9 @@ pub(crate) enum Kind {
     U128,
     F32,
     F64,
+    /// As wide as a pointer: 64 bits on every target of this edition (`num.types.2`).
+    Isize,
+    Usize,
 }
 
 impl Kind {
@@ -46,6 +49,8 @@ impl Kind {
             "u128" => Kind::U128,
             "f32" => Kind::F32,
             "f64" => Kind::F64,
+            "isize" => Kind::Isize,
+            "usize" => Kind::Usize,
             _ => return None,
         })
     }
@@ -55,7 +60,10 @@ impl Kind {
     }
 
     fn signed(self) -> bool {
-        matches!(self, Kind::I8 | Kind::I16 | Kind::I32 | Kind::I128)
+        matches!(
+            self,
+            Kind::I8 | Kind::I16 | Kind::I32 | Kind::I128 | Kind::Isize
+        )
     }
 
     pub(crate) fn width(self) -> u32 {
@@ -63,7 +71,7 @@ impl Kind {
             Kind::I8 | Kind::U8 => 8,
             Kind::I16 | Kind::U16 => 16,
             Kind::I32 | Kind::U32 | Kind::F32 => 32,
-            Kind::U64 | Kind::F64 => 64,
+            Kind::U64 | Kind::F64 | Kind::Isize | Kind::Usize => 64,
             Kind::I128 | Kind::U128 => 128,
         }
     }

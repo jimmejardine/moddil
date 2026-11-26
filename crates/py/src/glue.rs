@@ -251,6 +251,8 @@ fn range(m: &str) -> (&'static str, &'static str, bool) {
         "u16" => ("0", "UINT16_MAX", true),
         "u32" => ("0", "UINT32_MAX", true),
         "u64" => ("0", "UINT64_MAX", true),
+        "usize" => ("0", "SIZE_MAX", true),
+        "isize" => ("PTRDIFF_MIN", "PTRDIFF_MAX", false),
         _ => ("INT64_MIN", "INT64_MAX", false),
     }
 }

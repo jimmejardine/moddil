@@ -110,7 +110,7 @@ pub(crate) fn ctype(items: &ItemTree, ty: &Ty) -> Result<CType, String> {
             Num::I8 | Num::U8 => CType::I8,
             Num::I16 | Num::U16 => CType::I16,
             Num::I32 | Num::U32 => CType::I32,
-            Num::U64 => CType::I64,
+            Num::U64 | Num::Usize | Num::Isize => CType::I64,
             Num::F32 => CType::F32,
             Num::F64 => CType::F64,
             Num::I128 | Num::U128 => return Err("a 128-bit integer given to C".to_string()),

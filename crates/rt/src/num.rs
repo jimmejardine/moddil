@@ -59,8 +59,9 @@ pub fn float_f32(name: &str, x: f32, y: f32) -> Option<f32> {
 }
 
 /// The sized number types, by their codes from 1: their bits, and whether each is signed or a
-/// float.
-pub const NUMS: [(&str, u32, bool, bool); 11] = [
+/// float. `usize` and `isize` come last, so the others keep their codes; a pointer is 64 bits
+/// wide on every target of this edition (`num.types.2`).
+pub const NUMS: [(&str, u32, bool, bool); 13] = [
     ("i8", 8, true, false),
     ("i16", 16, true, false),
     ("i32", 32, true, false),
@@ -72,6 +73,8 @@ pub const NUMS: [(&str, u32, bool, bool); 11] = [
     ("u128", 128, false, false),
     ("f32", 32, true, true),
     ("f64", 64, true, true),
+    ("usize", 64, false, false),
+    ("isize", 64, true, false),
 ];
 
 /// The conversions, by number: `checked_to`, `truncate`, `wrap`, `saturate`.

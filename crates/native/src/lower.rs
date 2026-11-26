@@ -96,7 +96,8 @@ pub(crate) fn clif_type(ty: &Ty) -> Result<Option<ir::Type>, String> {
             Num::I8 | Num::U8 => types::I8,
             Num::I16 | Num::U16 => types::I16,
             Num::I32 | Num::U32 => types::I32,
-            Num::U64 => types::I64,
+            // As wide as a pointer: 64 bits on every target of this edition (`num.types.2`).
+            Num::U64 | Num::Usize | Num::Isize => types::I64,
             Num::I128 | Num::U128 => types::I128,
             Num::F32 => types::F32,
             Num::F64 => types::F64,
@@ -563,6 +564,8 @@ fn c_type_name(items: &ItemTree, ty: &Ty) -> String {
             Num::I32 => "int32_t",
             Num::U32 => "uint32_t",
             Num::U64 => "uint64_t",
+            Num::Usize => "size_t",
+            Num::Isize => "ptrdiff_t",
             Num::F32 => "float",
             Num::F64 => "double",
             Num::I128 | Num::U128 => "__int128",
@@ -633,7 +636,7 @@ pub(crate) fn header(db: &dyn Db, program: Program, exports: &[u32], name: &str)
     };
     let mut out = format!(
         "/* {name}.h: the C ABI of the Moddil mod `{name}`, written by `moddil build --lib`. */\n\
-         #ifndef {guard}_H\n#define {guard}_H\n\n#include <stdbool.h>\n#include <stdint.h>\n\n"
+         #ifndef {guard}_H\n#define {guard}_H\n\n#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n\n"
     );
     let mut structs = Vec::new();
     for &f in exports {

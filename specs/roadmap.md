@@ -31,9 +31,10 @@ Python teams and backend teams come before the browser (decided November 2026,
   dependencies, or an evaluator hook from the interpreter into sema.
 - Holes in tagged literals other than `fmt` (`sql"… {user} …"`), as typed parameters.
 
-**P5. Numbers** (`crates/sema`, the prelude, every runner; L)
-- `usize` and `isize`, for FFI and memory-level code: a `Num` each, the width of a pointer on
-  each target, through sema, MIR and all four runners and the C ABI.
+**P5. Numbers** (`crates/sema`, `crates/native`, `crates/wasm`, `crates/rt`; L)
+- `usize` and `isize` 32 bits wide on wasm32 (`num.types.2` says a pointer's width; they are 64
+  everywhere today): needs 32-bit layouts there, for pointers, borrows and `Buf`, through sema's
+  `size_of`, the lowering, the runtime and the shower, with a conformance test's value per target.
 
 **P6. Arrays and iteration** (prelude `arrays` and `iter`, `crates/sema`, `crates/mir`, the
 runners; M)

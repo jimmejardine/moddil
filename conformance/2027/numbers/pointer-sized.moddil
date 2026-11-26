@@ -1,0 +1,73 @@
+// covers: num.types.2, num.widen.1
+
+fn length(n: u32) -> usize {
+    n
+}
+
+fn offset(n: i32) -> isize {
+    n
+}
+
+fn wide(n: usize) -> u64 {
+    n
+}
+
+fn signed(n: isize) -> int {
+    n
+}
+
+test "usize and isize are as wide as a pointer" {
+    let most: usize = 18446744073709551615;
+    most  // => 18446744073709551615
+    ;
+    let least: isize = -9223372036854775808;
+    least  // => -9223372036854775808
+    ;
+    let n: usize = 40;
+    n + 2  // => 42
+    ;
+    let d: isize = -5;
+    -d  // => 5
+}
+
+test "they widen as they would at any pointer width" {
+    length(7)  // => 7
+    ;
+    offset(-7)  // => -7
+    ;
+    let n: usize = 9;
+    wide(n)  // => 9
+    ;
+    let d: isize = -9;
+    signed(d)  // => -9
+    ;
+    let small: u16 = 3;
+    let s: isize = small;
+    s  // => 3
+}
+
+test "conversions" {
+    let n: usize = 300;
+    n.checked_to::<u8>()  // => None
+    ;
+    n.to::<int>() ?! "it fits"  // => 300
+    ;
+    n.truncate::<u8>()  // => 44
+    ;
+    let d: isize = -1;
+    d.wrap::<usize>()  // => 18446744073709551615
+    ;
+    n.checked_add(1)  // => Some(301)
+    ;
+    n.count_ones()  // => 4
+}
+
+test "usize overflow traps at 64 bits" {
+    let most: usize = 18446744073709551615;
+    most + 1;  //~ trap
+}
+
+test "a usize below zero traps" {
+    let n: usize = 1;
+    n - 2;  //~ trap
+}

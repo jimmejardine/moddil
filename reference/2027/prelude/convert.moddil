@@ -667,6 +667,134 @@ impl u128 {
     }
 }
 
+impl usize {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None    => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not a `usize` (`num.ops.1`).
+    fn checked_add(self, other: usize) -> Option<usize> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not a `usize`.
+    fn checked_sub(self, other: usize) -> Option<usize> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not a `usize`.
+    fn checked_mul(self, other: usize) -> Option<usize> {
+        let r = self *% other;
+        if self == 0 || r / self == other { Some(r) } else { None }
+    }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
+    }
+}
+
+impl isize {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None    => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not an `isize` (`num.ops.1`).
+    fn checked_add(self, other: isize) -> Option<isize> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not an `isize`.
+    fn checked_sub(self, other: isize) -> Option<isize> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not an `isize`.
+    fn checked_mul(self, other: isize) -> Option<isize> {
+        let r = self *% other;
+        if self == 0 {
+            return Some(0);
+        }
+        if self == -1 {
+            // Only the least value is its own negation (besides 0), and it has no positive.
+            return if other != 0 && other == other *% -1 { None } else { Some(r) };
+        }
+        // Dividing back gives `other` exactly if nothing wrapped.
+        if r / self == other { Some(r) } else { None }
+    }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
+    }
+}
+
 impl f32 {
     // The value as `Display` writes it.
     #[intrinsic]

@@ -20,6 +20,8 @@ pub fn num_code(n: Option<Num>) -> u32 {
         Some(Num::U128) => "u128",
         Some(Num::F32) => "f32",
         Some(Num::F64) => "f64",
+        Some(Num::Isize) => "isize",
+        Some(Num::Usize) => "usize",
     };
     moddil_rt::num::code(name).expect("a number type the runtime knows")
 }
