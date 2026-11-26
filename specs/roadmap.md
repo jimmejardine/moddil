@@ -69,9 +69,8 @@ L)
   frozen as data (E1008 now).
 
 **P12. Contracts and refinements** (`crates/sema`, `crates/mir`, `crates/refinterp`; L)
-- `invariant` on a struct (`correctness.md`), its field names in scope as in the spec's
-  `OrderBook`: checked when a struct literal builds one and when a method of it taking
-  `&mut self` returns.
+- A struct `invariant`'s purity (E1102, as a contract's), and its check after a field is
+  changed in place from outside the struct's methods.
 - Contracts on trait methods, binding every impl: the trait's `requires` and `ensures`, written
   in the trait's file and scope, checked on entry to and return from each impl's method.
 

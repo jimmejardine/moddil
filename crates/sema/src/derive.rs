@@ -342,6 +342,19 @@ pub(crate) fn expand<'t>(
             })
             .unwrap_or_default();
         let type_params = generics.iter().any(|(_, decl)| decl.is_none());
+        // A struct's invariants (`contract.invariant.1`): the prelude's `__Invariant`, whose
+        // `__holds` is them all, the fields named as they are.
+        if let Some(line) = invariant_impl(&node, &name, &generics) {
+            let at = node
+                .child(K::STRUCT_BODY)
+                .and_then(|b| b.children().find(|c| c.kind() == K::INVARIANT))
+                .map_or(node.text_range(), |i| i.text_range());
+            let start = out.text.len() as u32;
+            out.text.push_str(&line);
+            let end = out.text.len() as u32;
+            out.text.push('\n');
+            out.origins.push((TextRange::new(start, end), src, at));
+        }
         let attrs = derive_attrs(&node);
         let all: Vec<&String> = attrs.iter().flat_map(|(_, n)| n).collect();
         let copy = all.iter().any(|n| *n == "Copy");
@@ -389,6 +402,39 @@ pub(crate) fn expand<'t>(
         }
     }
     out
+}
+
+/// The impl of the prelude's `__Invariant` for struct `node`, named `name` with `generics`, if it
+/// has `invariant`s (`contract.invariant.1`): `__holds` binds each field by its name, borrowed,
+/// and is every invariant joined by `&&`.
+fn invariant_impl(
+    node: &SyntaxNode,
+    name: &str,
+    generics: &[(String, Option<String>)],
+) -> Option<String> {
+    let body = node.child(K::STRUCT_BODY)?;
+    let conds: Vec<String> = body
+        .children()
+        .filter(|c| c.kind() == K::INVARIANT)
+        .filter_map(|c| c.children().find_map(ast::Expr::cast))
+        .map(|e| format!("({})", e.syntax().text()))
+        .collect();
+    if conds.is_empty() {
+        return None;
+    }
+    let fields: Vec<String> = body
+        .children()
+        .filter(|c| c.kind() == K::FIELD)
+        .map(|f| name_of(&f))
+        .collect();
+    Some(format!(
+        "impl{} __Invariant for {name}{} {{ fn __holds(&self) -> bool {{ let {name} {{ {} }} = \
+         self; {} }} }}",
+        unbounded(generics),
+        args_of(generics),
+        fields.join(", "),
+        conds.join(" && ")
+    ))
 }
 
 /// The derived impl of trait `tr` for struct `name` with type parameters `params` and named

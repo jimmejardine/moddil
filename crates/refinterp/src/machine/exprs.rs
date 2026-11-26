@@ -415,11 +415,73 @@ impl Machine<'_> {
         let info = info.clone();
         let mut fields = vec![Value::Unit; info.fields.len()];
         self.struct_fields(node, &info, &mut fields)?;
-        Ok(Value::Adt {
+        let v = Value::Adt {
             ty,
             variant: info.name,
             fields,
-        })
+        };
+        // A struct with invariants holds them once made (`contract.invariant.1`).
+        let Value::Adt { ty, .. } = &v else {
+            return Ok(v);
+        };
+        if self
+            .program
+            .adts
+            .get(ty)
+            .is_none_or(|a| a.invariants.is_empty())
+        {
+            return Ok(v);
+        }
+        let mark = self.memory.mark();
+        let at = self.memory.temp(v);
+        let held = self.invariant(&at, node.text_range());
+        let v = self.memory.load(&at);
+        self.memory.truncate(mark);
+        held.map(|()| v)
+    }
+
+    /// Traps unless the struct at `at`, if it has invariants, holds them
+    /// (`contract.invariant.1`): each evaluated in its module, its fields named, borrowed.
+    pub(super) fn invariant(
+        &mut self,
+        at: &crate::value::Pointer,
+        range: moddil_syntax::TextRange,
+    ) -> Eval<()> {
+        let Value::Adt { ty, variant, .. } = self.memory.load(at) else {
+            return Ok(());
+        };
+        let Some(info) = self.program.adts.get(&ty) else {
+            return Ok(());
+        };
+        if info.invariants.is_empty() {
+            return Ok(());
+        }
+        let (conds, file, module) = (info.invariants.clone(), info.file, info.module);
+        let names = self.program.variant(&ty, &variant).fields.clone();
+        self.memory
+            .push_frame(std::collections::HashMap::new(), file, module, false);
+        for (i, n) in names.iter().enumerate() {
+            let mut p = at.clone();
+            p.path.push(i);
+            self.memory.push(n.clone(), Value::Ref(p, false));
+        }
+        let mut broken = Ok(());
+        for c in &conds {
+            match self.eval(c) {
+                Ok(Value::Bool(true)) => {}
+                Ok(_) => {
+                    broken = Err(trap(TrapClass::Invariant, range));
+                    break;
+                }
+                Err(flow) => {
+                    broken = Err(flow);
+                    break;
+                }
+            }
+        }
+        self.memory.truncate(0);
+        self.memory.pop_frame();
+        broken
     }
 
     /// `e`, where number type `ty` is written for it (`num.lit.1`): arithmetic on literals that

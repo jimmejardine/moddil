@@ -333,6 +333,9 @@ impl Builder<'_> {
                     dest,
                     Rvalue::Aggregate(AggregateKind::Adt { adt, variant, path }, ordered),
                 );
+                // A struct with invariants holds them once made (`contract.invariant.1`).
+                let ty = self.ty(e);
+                self.invariant(Place::local(dest), &ty, range);
             }
             ExprKind::Block {
                 stmts,

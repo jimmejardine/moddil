@@ -560,6 +560,9 @@ pub enum TrapClass {
     Precondition,
     /// An `ensures` that does not hold: the function's bug.
     Postcondition,
+    /// A struct's `invariant` that does not hold, after a literal made it or a method taking
+    /// `&mut self` changed it (`contract.invariant.1`).
+    Invariant,
     /// An error that `?!` said cannot happen.
     Unexpected,
     /// `unreachable("reason")` reached: a broken invariant (`expr.unreachable.1`).
@@ -583,6 +586,7 @@ impl TrapClass {
             TrapClass::Deadlock => "deadlock",
             TrapClass::Precondition => "precondition broken",
             TrapClass::Postcondition => "postcondition broken",
+            TrapClass::Invariant => "invariant broken",
             TrapClass::Unexpected => "unexpected error",
             TrapClass::Unreachable => "unreachable",
             TrapClass::Unimplemented => "not implemented yet",

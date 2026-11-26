@@ -644,6 +644,7 @@ impl Collector<'_> {
             if *src == Src::Derived
                 && !tags::is_wrapper_impl(node)
                 && let Some(tr) = derived_trait(node)
+                && tr != "__Invariant"
                 && !derive::DERIVABLE.contains(&tr.as_str())
                 && !self.stub_trait(&tr)
                 && self.derive_fn(&tr).is_none()

@@ -640,8 +640,16 @@ impl Machine<'_> {
         self.memory
             .push_frame(types, file, f.module as usize, f.tracked);
         let mut args = args.into_iter();
+        // A method taking `&mut self` leaves its struct's invariants holding
+        // (`contract.invariant.1`): what `self` points to, checked when it returns.
+        let mut changed = None;
         if f.self_kind.is_some() {
             let v = args.next().expect("`self`");
+            if f.self_kind == Some(SelfKind::RefMut)
+                && let Value::Ref(p, _) = &v
+            {
+                changed = Some(p.clone());
+            }
             self.memory.push("self".to_string(), v);
         }
         for (p, v) in params.iter().zip(args) {
@@ -738,6 +746,13 @@ impl Machine<'_> {
                 self.deref_coerced(v, ret.as_ref(), range)
             }
             r => r,
+        };
+        let result = match (result, changed) {
+            (Ok(v), Some(p)) => {
+                let at = f.node.name().map_or(range, |n| n.syntax().text_range());
+                self.invariant(&p, at).map(|()| v)
+            }
+            (r, _) => r,
         };
         // The postconditions, with `result` the value returned.
         let result = match result {

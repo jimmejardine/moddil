@@ -168,7 +168,8 @@ pub(crate) fn derived_fields(tree: &ItemTree) -> Vec<Diagnostic> {
         };
         let def = &tree.adts[a as usize];
         let name = tr.name.as_ref();
-        if matches!(name, "Copy" | "Eq") || (name == "Clone" && def.copy) {
+        // A struct's invariants are its own code, checked where they are written.
+        if matches!(name, "Copy" | "Eq" | "__Invariant") || (name == "Clone" && def.copy) {
             continue;
         }
         // A derive with a template asks of the fields only what the template's code does,

@@ -50,6 +50,9 @@ pub(crate) struct AdtInfo {
     pub(crate) bare: bool,
     /// The module it is declared in, whose names its fields' types use.
     pub(crate) module: usize,
+    /// A struct's `invariant`s (`contract.invariant.1`), and the file they are in.
+    pub(crate) invariants: Vec<ast::Expr>,
+    pub(crate) file: Option<u32>,
 }
 
 /// How a method takes `self`.
@@ -680,6 +683,14 @@ impl Program {
                         derives,
                         bare,
                         module,
+                        invariants: item
+                            .child(K::STRUCT_BODY)
+                            .into_iter()
+                            .flat_map(|b| b.children().collect::<Vec<_>>())
+                            .filter(|c| c.kind() == K::INVARIANT)
+                            .filter_map(|c| c.children().find_map(ast::Expr::cast))
+                            .collect(),
+                        file,
                     },
                 );
             }
@@ -865,6 +876,8 @@ impl Program {
                 derives: ["Debug", "Clone", "PartialEq"].map(String::from).to_vec(),
                 bare: false,
                 module,
+                invariants: Vec::new(),
+                file: None,
             },
         );
         let mut path = self.file_paths[file as usize].clone();

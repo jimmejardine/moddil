@@ -1,0 +1,54 @@
+// covers: contract.invariant.1
+
+struct Span {
+    lo: int,
+    hi: int,
+    invariant lo <= hi,
+}
+
+impl Span {
+    fn widen(&mut self, by: int) {
+        self.hi += by;
+    }
+
+    fn len(&self) -> int {
+        self.hi - self.lo
+    }
+
+    // It breaks the invariant: reported at its name.
+    fn collapse(&mut self) {  //~ trap
+        self.hi = self.lo - 1;
+    }
+}
+
+struct Book {
+    bids: Vec<int>,
+    asks: Vec<int>,
+    invariant bids.is_empty() || asks.is_empty() || bids[0] < asks[0],
+    invariant bids.len() < 10,
+}
+
+test "invariants that hold" {
+    let mut s = Span { lo: 1, hi: 3 };
+    s.widen(2);
+    s.len()  // => 4
+    ;
+    let b = Book { bids: [1], asks: [5] };
+    b.bids.len() + b.asks.len()  // => 2
+}
+
+test "a literal that breaks one" {
+    let s = Span { lo: 5, hi: 3 };  //~ trap
+    s.len()
+}
+
+test "a method taking &mut self that breaks one" {
+    let mut s = Span { lo: 1, hi: 3 };
+    s.collapse();
+    s.len()
+}
+
+test "the second of two" {
+    let b = Book { bids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], asks: [] };  //~ trap
+    b.bids.len()
+}

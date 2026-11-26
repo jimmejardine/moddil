@@ -492,6 +492,46 @@ impl Builder<'_> {
         self.solver.is_copy(ty)
     }
 
+    /// If `ty` is a struct with invariants, traps unless they hold of the value at `place`
+    /// (`contract.invariant.1`): its derived `__Invariant::__holds`.
+    pub(super) fn invariant(&mut self, place: Place, ty: &Ty, range: TextRange) {
+        let Some(tr) = self.items.lang_ref("__Invariant") else {
+            return;
+        };
+        if !matches!(ty, Ty::Adt(..))
+            || !matches!(self.solver.implements(ty, &tr), moddil_sema::Answer::Yes(_))
+        {
+            return;
+        }
+        let Some(func) = self.items.traits[tr.trait_ as usize]
+            .methods
+            .first()
+            .copied()
+        else {
+            return;
+        };
+        let r = self.temp(Ty::reference(false, ty.clone()));
+        self.cfg.assign(r, Rvalue::Ref(false, place));
+        let ok = self.temp(Ty::Bool);
+        self.call_into(
+            None,
+            Callee::Trait {
+                func,
+                args: vec![ty.clone()],
+            },
+            Place::local(ok),
+            vec![Operand::Move(Place::local(r))],
+            range,
+        );
+        self.cfg.push(Statement::Assert {
+            cond: Operand::Copy(Place::local(ok)),
+            expected: true,
+            trap: TrapClass::Invariant,
+            range,
+            parts: Vec::new(),
+        });
+    }
+
     /// `Clone::clone`, if `ty` implements `Clone` (and is not `Copy`, which needs none).
     pub(super) fn clone_fn(&mut self, ty: &Ty) -> Option<u32> {
         if self.is_copy(ty) {
@@ -574,6 +614,23 @@ impl Builder<'_> {
 
     /// Before returning: the postconditions, with `result` holding the value returned.
     pub(super) fn ensures(&mut self) {
+        // A method taking `&mut self` of a struct with invariants leaves them holding
+        // (`contract.invariant.1`).
+        if !self.in_closure
+            && let Item::Fn(f) = self.base
+            && self.items.fns[f as usize].self_kind == Some(moddil_sema::SelfKind::RefMut)
+            && self.items.fns[f as usize].name != "__holds"
+            && let Some(&this) = self.hir.params.first()
+        {
+            let l = self.local(this);
+            let place = Place::local(l).deref();
+            let ty = match self.cfg.local_ty(l) {
+                Ty::Ref(_, t) => (*t).clone(),
+                t => t,
+            };
+            let range = self.items.fns[f as usize].name_range;
+            self.invariant(place, &ty, range);
+        }
         if self.hir.ensures.is_empty() || self.in_closure {
             return;
         }

@@ -19,6 +19,13 @@ was called: a broken precondition is the caller's fault ([Traps](traps.md)).
 on `None`), each `ensures` is evaluated with `result` naming the value returned; one that is
 `false` traps at the clause (a broken postcondition). Leaving with an error checks none.
 
+**contract.invariant.1** A struct's body may hold `invariant e`, any number of them, among its
+fields: each a `bool` in which the fields are named as they are, borrowed (`invariant lo <= hi`).
+They are checked, in order, after a struct literal makes one (wherever it is written), and when a
+method of its impls taking `&mut self` returns, of what `self` points to; one that is `false`
+traps, `invariant broken`, at the literal or at the method's name. A field changed in place from
+outside the struct's methods is not checked, for now.
+
 **contract.old.1** In an `ensures`, `old(e)` is the value `e` had on entry: `e` is evaluated then,
 and kept as a copy if its type is `Copy`, or else as a clone (`e` itself is not moved), so its
 type is `Clone` (E1103).

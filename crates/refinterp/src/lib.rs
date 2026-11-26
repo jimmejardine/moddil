@@ -58,6 +58,8 @@ pub enum TrapClass {
     Precondition,
     /// An `ensures` that does not hold (`contract.ensures.1`).
     Postcondition,
+    /// A struct's `invariant` that does not hold (`contract.invariant.1`).
+    Invariant,
     /// Every task waits, and nothing can wake one (`task.sched.1`).
     Deadlock,
     /// What waits for a runtime: a `select` on an operation other than the prelude's
@@ -79,6 +81,7 @@ impl fmt::Display for TrapClass {
             TrapClass::CapacityExceeded => "capacity exceeded",
             TrapClass::Precondition => "precondition broken",
             TrapClass::Postcondition => "postcondition broken",
+            TrapClass::Invariant => "invariant broken",
             TrapClass::Deadlock => "deadlock",
         })
     }

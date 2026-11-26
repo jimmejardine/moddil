@@ -181,6 +181,13 @@ trait Drop {
     fn drop(self);
 }
 
+// A struct's invariants (`contract.invariant.1`): the impl a struct with them has, derived, whose
+// `__holds` is them all; a struct literal and each return of its methods taking `&mut self`
+// check it.
+trait __Invariant {
+    fn __holds(&self) -> bool;
+}
+
 // Ends `x` early: it is moved in, and dropped at the end of the call.
 fn drop<T>(x: T) {}
 

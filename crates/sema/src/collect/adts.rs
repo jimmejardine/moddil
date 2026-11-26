@@ -248,10 +248,8 @@ pub(super) fn variant_def(
     let mut fields: Vec<FieldDef> = Vec::new();
     let shape = if let Some(body) = node.child(K::STRUCT_BODY) {
         for m in body.children() {
+            // An invariant is the derived `__Invariant`'s (`contract.invariant.1`).
             if m.kind() != K::FIELD {
-                if m.kind() != K::OUTER_ATTR {
-                    diagnostics.push(Diagnostic::unsupported(m.text_range(), "an invariant"));
-                }
                 continue;
             }
             for c in m.children() {
