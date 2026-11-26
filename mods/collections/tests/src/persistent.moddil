@@ -49,17 +49,19 @@ test "a list of values that need dropping" {
 }
 
 test "a long list is dropped cell by cell, and a shared tail stays" {
+    // Three times as long as calls may nest (10,000 on every runner): dropped by one call per
+    // cell, it would trap.
     let mut long: PersistentList<int> = PersistentList::new();
-    for i in 0..300000 {
+    for i in 0..30000 {
         long = long.push_front(i);
     }
     let tail = long.rest().rest();
     drop(long);
-    tail.len()  // => 299998
+    tail.len()  // => 29998
     ;
     tail.first()
         .map(|x| *x)
-        .unwrap_or(-1)  // => 299997
+        .unwrap_or(-1)  // => 29997
 }
 
 /// `0, 1, …, n - 1`, pushed one at a time.
