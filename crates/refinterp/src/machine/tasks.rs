@@ -113,8 +113,8 @@ pub(crate) struct Tasks {
     /// The seed's generator, which picks the next ready task (`task.runtime.1`); 0 for first
     /// in, first out.
     seed: u64,
-    /// How many executors have been made (`task.executor.1`): they are numbered from 1.
-    executors: i64,
+    /// Each executor's priority (`task.executor.1`): they are numbered from 1.
+    executors: Vec<i64>,
 }
 
 impl TaskState {
@@ -149,7 +149,7 @@ impl Tasks {
             threads: Vec::new(),
             panicked: false,
             seed: 0,
-            executors: 0,
+            executors: Vec::new(),
         }
     }
 
@@ -340,11 +340,21 @@ impl Tasks {
             self.channels[c].senders -= 1;
             self.wake();
         }
-        if self.seed == 0 || self.ready.len() < 2 {
-            return self.ready.pop_front();
-        }
-        let i = (split_mix(&mut self.seed) % self.ready.len() as u64) as usize;
-        self.ready.remove(i)
+        // Those of the most urgent executor's priority (`task.executor.1`), in order.
+        let priority = |t: usize| match self.states[t].executor {
+            0 => 1,
+            e => self.executors[e as usize - 1],
+        };
+        let best = self.ready.iter().map(|&t| priority(t)).max()?;
+        let first: Vec<usize> = (0..self.ready.len())
+            .filter(|&i| priority(self.ready[i]) == best)
+            .collect();
+        let k = if self.seed == 0 || first.len() < 2 {
+            0
+        } else {
+            (split_mix(&mut self.seed) % first.len() as u64) as usize
+        };
+        self.ready.remove(first[k])
     }
 
     fn pop(&mut self, c: usize) -> Option<Value> {
@@ -499,10 +509,15 @@ impl Machine<'_> {
                 let me = self.memory.task();
                 Ok(Value::Int(self.with_tasks(|ts| ts.states[me].executor)))
             }
-            ("", "__executor_new") => Ok(Value::Int(self.with_tasks(|ts| {
-                ts.executors += 1;
-                ts.executors
-            }))),
+            ("", "__executor_new") => {
+                let Value::Int(priority) = args[4] else {
+                    unreachable!("a priority")
+                };
+                Ok(Value::Int(self.with_tasks(|ts| {
+                    ts.executors.push(priority);
+                    ts.executors.len() as i64
+                })))
+            }
             ("Scope", "stop") => {
                 let s = id(self, &args[0]);
                 self.with_tasks(|ts| {

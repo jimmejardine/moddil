@@ -141,8 +141,9 @@ or `affine` ([`specs/runtime.md`: Starting a program](../../specs/runtime.md#sta
 `s.spawn(f, on: e)` runs its task on `e`, and `scope(body, on: e)` its body; without `on:`, a
 task runs on the executor of the task that spawns it, and a scope's body on the running task's.
 The run's first task is on executor 0, the default one. `Executor::current()` is the running
-task's. Under the deterministic runtime an executor is only kept, and its tasks recorded: they run
-one at a time as any do (**task.sched.1**).
+task's. Under the deterministic runtime tasks run one at a time as any do (**task.sched.1**), and
+of the ready tasks, those on the executors of the highest priority run first (the default one's
+is `Normal`); the rest of what an executor is takes effect under the parallel runtime.
 
 **task.borrow.1** A task's closure may borrow what outlives the scope: a shared borrow by any
 number of tasks, a `&mut` borrow by one. The scope keeps what its tasks borrow until it ends, so

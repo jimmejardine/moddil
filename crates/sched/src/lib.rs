@@ -725,11 +725,21 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
                 self.fire(i);
             }
         }
-        if self.seed == 0 || self.ready.len() < 2 {
-            return self.ready.pop_front();
-        }
-        let i = (split_mix(&mut self.seed) % self.ready.len() as u64) as usize;
-        self.ready.remove(i)
+        // Those of the most urgent executor's priority (`task.executor.1`), in order.
+        let priority = |t: usize| match self.tasks[t].executor {
+            0 => 1,
+            e => self.executors[e as usize - 1].priority,
+        };
+        let best = self.ready.iter().map(|&t| priority(t)).max()?;
+        let first: Vec<usize> = (0..self.ready.len())
+            .filter(|&i| priority(self.ready[i]) == best)
+            .collect();
+        let k = if self.seed == 0 || first.len() < 2 {
+            0
+        } else {
+            (split_mix(&mut self.seed) % first.len() as u64) as usize
+        };
+        self.ready.remove(first[k])
     }
 
     /// Runs the tasks from now on in the order seed `seed` picks (`task.runtime.1`): with 0,

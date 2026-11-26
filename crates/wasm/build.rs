@@ -10,7 +10,8 @@ use std::process::Command;
 fn main() {
     let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("cargo sets it"));
     let root = manifest.join("../..");
-    for dir in ["crates/rt", "crates/rt-wasm"] {
+    // The runtime and what it is built from: its scheduler too.
+    for dir in ["crates/rt", "crates/rt-wasm", "crates/sched"] {
         println!(
             "cargo::rerun-if-changed={}",
             root.join(dir).join("src").display()

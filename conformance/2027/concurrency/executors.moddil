@@ -20,3 +20,15 @@ test "a scope's body runs on the executor it is opened on" {
     ;
     Executor::current()  // => Executor { id: 0 }
 }
+
+test "the ready tasks of a more urgent executor run first" {
+    let low = Executor::__new(0, 0..4, -1, 0, false, 0);
+    let high = Executor::__new(0, 4..8, -1, 2, false, 0);
+    let (tx, rx) = channel::<int>(3);
+    scope(|s| {
+        s.spawn (|| tx.send(1) ?! "the receiver is here", on: low);
+        s.spawn (|| tx.send(2) ?! "the receiver is here");
+        s.spawn (|| tx.send(3) ?! "the receiver is here", on: high);
+    });
+    (rx.recv(), rx.recv(), rx.recv())  // => (Some(3), Some(2), Some(1))
+}

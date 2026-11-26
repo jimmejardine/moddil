@@ -180,26 +180,18 @@ L)
      and a bound trait's method preferred over an inherent one of the same name in generic code;
      then the conformance suite's avoidance of these ends.
 
-The parallel runtime is four packages, done in this order: P37, then P40 and P41's logic
+The parallel runtime is three packages, done in this order: what is left of P40 and P41's logic
 half, then P38's stages, with P41's benchmarks as each lands (`runtime.md`).
 
-**P37. Choosing the runtime** (`crates/rt`, `crates/sched`, prelude, `mods/runtime`,
-`crates/moddil`; M). The apparatus, with only the deterministic runtime behind it.
-- Executors' priorities simulated under `runtime-sim`: a ready task of a higher-priority executor
-  runs first (the `Cpus` capability, the executors and `on:` are built and recorded,
-  `task.executor.1`).
-- The manifest's core counts (`[[exe]] runtime` and `threads`, `--runtime` and `--threads` are
-  built; `parallel` is refused until P38).
-- `moddil/sim` refused under `parallel`: its cells assume one task at a time.
-- Conformance on all four runners, which all run `runtime-sim` and so keep agreeing.
-
-**P38. The parallel runtime** (`crates/rt`, `crates/sched`, `crates/native`; L, after P37 and
-P40, with P41's tests). In stages, each a commit with P41's suite green:
+**P38. The parallel runtime** (`crates/rt`, `crates/sched`, `crates/native`; L, after P40, with
+P41's tests). In stages, each a commit with P41's suite green:
 1. Several tasks at once: the baton becomes N batons, still a thread per task, so the semantics
    are proven before the mechanics change. `Rc` then needs the merge queue (`memory.md`): a
    non-owner that takes the shared count below 0 queues the allocation to its owner task, which
    the runtime drains when it resumes the task and at its end; and the running task's number
-   (`moddil_rt_task`, one word now) per worker.
+   (`moddil_rt_task`, one word now) per worker. `moddil run --runtime parallel` and
+   `runtime::parallel(&cpus)` stop being refused; `moddil/sim`, whose cells assume one task at a
+   time, is refused under it.
 2. User-space stacks: a context switch of its own per target (x86-64 SysV and Win64, AArch64);
    stacks reserved large, committed lazily, with guard pages; tasks become coroutines on worker
    threads (M:N).
@@ -208,7 +200,8 @@ P40, with P41's tests). In stages, each a commit with P41's suite green:
 4. Preemption: a timer thread sets each worker's safe-point word (`moddil_rt_preempt`, one word
    now), and `moddil_rt_safe_point` gives way; no signals. `pinned` executors' code leaves the
    checks out.
-5. Executors (with priority inheritance: a task parked at a sync cell lends its executor's
+5. The manifest's core count for the parallel runtime (`[[exe]] cores`, beside `runtime` and
+   `threads`). Executors (with priority inheritance: a task parked at a sync cell lends its executor's
    priority to the task holding it): `default` and `pool`, work-stealing; `pinned`, with core affinity, real-time
    priority and optional busy-polling, never lending; `blocking`, growing on demand, with
    `blocking` C functions routed to it; `affine`; `on:` placement; idle executors lending their
