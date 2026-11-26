@@ -44,9 +44,13 @@ enum Command {
         #[arg(long, conflicts_with = "interp")]
         wasm: bool,
         /// The runtime its tasks run on, if `main` installs none (`task.runtime.1`): `sim`,
-        /// the deterministic one.
-        #[arg(long, default_value = "sim")]
-        runtime: String,
+        /// the deterministic one (the default, unless the manifest's `[[exe]] runtime` says).
+        #[arg(long)]
+        runtime: Option<String>,
+        /// `one` for a one-thread build: atomics as plain reads and writes, and no checks for
+        /// preemption (the default is `many`, unless the manifest's `[[exe]] threads` says).
+        #[arg(long)]
+        threads: Option<String>,
         /// The program's own arguments, after `--` (`Args`, `os.1`).
         #[arg(last = true)]
         args: Vec<String>,
@@ -62,8 +66,11 @@ enum Command {
         #[arg(long, conflicts_with = "interp")]
         wasm: bool,
         /// The runtime their tasks run on (`task.runtime.1`): `sim`, the deterministic one.
-        #[arg(long, default_value = "sim")]
-        runtime: String,
+        #[arg(long)]
+        runtime: Option<String>,
+        /// `one` to run them as a one-thread build (see `run`).
+        #[arg(long)]
+        threads: Option<String>,
         /// Run each with this seed: its ready tasks run in the order it picks, and with 0 (the
         /// default), first in, first out. A failure under `--seeds` names its seed for this.
         #[arg(long, default_value_t = 0, conflicts_with = "wasm")]
@@ -103,6 +110,9 @@ enum Command {
         /// `-o` names (by default, here).
         #[arg(long, conflicts_with_all = ["wasm", "release", "lib"])]
         wheel: bool,
+        /// `one` for a one-thread build (see `run`).
+        #[arg(long)]
+        threads: Option<String>,
     },
     /// Rewrites Moddil source in canonical format: the files named, and the `.moddil` files in
     /// the directories named (by default, here).
@@ -123,6 +133,8 @@ enum Command {
         index: u32,
         #[arg(long, default_value_t = 0)]
         seed: u64,
+        #[arg(long)]
+        threads: Option<String>,
     },
 }
 
@@ -131,22 +143,6 @@ const TRAPPED: u8 = 70;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    // The runtimes (`task.runtime.1`): only the deterministic one is built yet.
-    if let Command::Run { runtime, .. } | Command::Test { runtime, .. } = &cli.command {
-        match runtime.as_str() {
-            "sim" => {}
-            "parallel" => {
-                eprintln!(
-                    "moddil: the parallel runtime is not built yet; `--runtime sim`, the                      deterministic one, runs one task at a time"
-                );
-                return ExitCode::FAILURE;
-            }
-            other => {
-                eprintln!("moddil: there is no runtime `{other}`: it is `sim` or `parallel`");
-                return ExitCode::FAILURE;
-            }
-        }
-    }
     if matches!(cli.command, Command::Lsp) {
         return match moddil_lsp::run() {
             Ok(()) => ExitCode::SUCCESS,
@@ -199,6 +195,43 @@ fn main() -> ExitCode {
     if matches!(cli.command, Command::Check { .. }) {
         return ExitCode::SUCCESS;
     }
+    // The runtime and the threads (`task.runtime.1`): as asked, or as the manifest says.
+    let (runtime, threads) = match &cli.command {
+        Command::Run {
+            runtime, threads, ..
+        }
+        | Command::Test {
+            runtime, threads, ..
+        } => (runtime.clone(), threads.clone()),
+        Command::Build { threads, .. } | Command::NativeTest { threads, .. } => {
+            (None, threads.clone())
+        }
+        _ => (None, None),
+    };
+    let root = &project.mods[0];
+    let runtime = runtime.or_else(|| root.runtime.clone());
+    let threads = match threads.or_else(|| root.threads.clone()).as_deref() {
+        None | Some("many") => moddil_native::Threads::Many,
+        Some("one") => moddil_native::Threads::One,
+        Some(other) => {
+            eprintln!("moddil: `--threads` is `one` or `many`, not `{other}`");
+            return ExitCode::FAILURE;
+        }
+    };
+    match runtime.as_deref() {
+        None | Some("sim") => {}
+        Some("parallel") => {
+            eprintln!(
+                "moddil: the parallel runtime is not built yet; `--runtime sim`, the \
+                 deterministic one, runs one task at a time"
+            );
+            return ExitCode::FAILURE;
+        }
+        Some(other) => {
+            eprintln!("moddil: there is no runtime `{other}`: it is `sim` or `parallel`");
+            return ExitCode::FAILURE;
+        }
+    }
     // C functions (`ffi.native.1`) run only in native code and on the MIR interpreter.
     let items = moddil_sema::item_tree(&db, program);
     let wasm = matches!(
@@ -240,7 +273,7 @@ fn main() -> ExitCode {
             wasm: true, args, ..
         } => run_wasm(&db, program, &files, &name, args),
         Command::Test { wasm: true, .. } => test_wasm(&db, program, &files),
-        Command::Run { args, .. } => run_native(&db, program, &files, &name, args.clone()),
+        Command::Run { args, .. } => run_native(&db, program, &files, &name, args.clone(), threads),
         Command::Test {
             interp,
             seed,
@@ -252,7 +285,7 @@ fn main() -> ExitCode {
             } else {
                 vec![*seed]
             };
-            test(&db, program, &files, *interp, path, &seeds)
+            test(&db, program, &files, *interp, path, &seeds, threads)
         }
         Command::Build {
             output, wasm: true, ..
@@ -277,8 +310,18 @@ fn main() -> ExitCode {
         } => finish(build_wheel(&db, program, &project, output.as_deref(), &c)),
         Command::Build {
             output, release, ..
-        } => finish(build(&db, program, path, output.as_deref(), *release, &c)),
-        Command::NativeTest { index, seed, .. } => native_test(&db, program, &files, *index, *seed),
+        } => finish(build(
+            &db,
+            program,
+            path,
+            output.as_deref(),
+            *release,
+            threads,
+            &c,
+        )),
+        Command::NativeTest { index, seed, .. } => {
+            native_test(&db, program, &files, *index, *seed, threads)
+        }
         Command::Lsp | Command::Fmt { .. } => unreachable!("handled above"),
     }
 }
@@ -390,13 +433,15 @@ fn run_native(
     files: &[(String, String)],
     name: &str,
     argv: Vec<String>,
+    threads: moddil_native::Threads,
 ) -> ExitCode {
     let items = moddil_sema::item_tree(db, program);
     let Some(main) = items.main_fn() else {
         eprintln!("moddil: {name} has no `fn main()`");
         return ExitCode::FAILURE;
     };
-    match moddil_native::run_main_exit(db, program, main, argv) {
+    let options = moddil_native::Options { seed: 0, threads };
+    match moddil_native::run_main_with(db, program, main, argv, options) {
         // An `ExitCode` (`main.exit.1`): the number it stands for.
         Ok((_, Some(code))) => ExitCode::from(code),
         Ok((v, None)) if v == "()" => ExitCode::SUCCESS,
@@ -541,8 +586,10 @@ fn native_test(
     files: &[(String, String)],
     index: u32,
     seed: u64,
+    threads: moddil_native::Threads,
 ) -> ExitCode {
-    let (observed, result) = moddil_native::run_test_seeded(db, program, index, seed);
+    let options = moddil_native::Options { seed, threads };
+    let (observed, result) = moddil_native::run_test_with(db, program, index, options);
     match result {
         Ok(()) => {
             let t = &moddil_sema::item_tree(db, program).tests[index as usize];
@@ -599,13 +646,18 @@ impl TestRun {
 
 /// Runs test `index` natively in a child process (so that a crash in compiled code fails it,
 /// not the run).
-fn native_child(path: &Path, index: u32, name: &str, seed: u64) -> TestRun {
+fn native_child(path: &Path, index: u32, name: &str, options: moddil_native::Options) -> TestRun {
+    let threads = match options.threads {
+        moddil_native::Threads::One => "one",
+        moddil_native::Threads::Many => "many",
+    };
     let out = std::env::current_exe().and_then(|exe| {
         std::process::Command::new(exe)
             .arg("__native-test")
             .arg(path)
             .arg(index.to_string())
-            .arg(format!("--seed={seed}"))
+            .arg(format!("--seed={}", options.seed))
+            .arg(format!("--threads={threads}"))
             .output()
     });
     let Ok(out) = out else {
@@ -765,6 +817,7 @@ fn build(
     path: &Path,
     output: Option<&Path>,
     release: bool,
+    threads: moddil_native::Threads,
     c: &[moddil_ffi::Built],
 ) -> Result<(), String> {
     let name = path.display().to_string();
@@ -772,11 +825,7 @@ fn build(
     let main = items
         .main_fn()
         .ok_or_else(|| format!("{name} has no `fn main()`"))?;
-    let built = if release {
-        moddil_native::build_release_object(db, program, main)
-    } else {
-        moddil_native::build_object(db, program, main)
-    };
+    let built = moddil_native::build_object_with(db, program, main, release, threads);
     let object = native_object(&name, built)?;
     let out = output.map_or_else(
         || {
@@ -996,6 +1045,7 @@ fn test(
     interp: bool,
     path: &Path,
     seeds: &[u64],
+    threads: moddil_native::Threads,
 ) -> ExitCode {
     let items = moddil_sema::item_tree(db, program);
     // The tests of the mod being built, not of its dependencies.
@@ -1014,7 +1064,8 @@ fn test(
                 let r = if interp {
                     interp_test(db, program, files, i, seed)
                 } else {
-                    native_child(path, i, &items.tests[i as usize].name, seed)
+                    let options = moddil_native::Options { seed, threads };
+                    native_child(path, i, &items.tests[i as usize].name, options)
                 };
                 let passed = r.passed;
                 run = Some(r);

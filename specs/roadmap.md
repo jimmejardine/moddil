@@ -188,9 +188,8 @@ half, then P38's stages, with P41's benchmarks as each lands (`runtime.md`).
 - Executors' priorities simulated under `runtime-sim`: a ready task of a higher-priority executor
   runs first (the `Cpus` capability, the executors and `on:` are built and recorded,
   `task.executor.1`).
-- The manifest's runtime and core counts (`moddil run --runtime sim|parallel` is built, `parallel`
-  refused until P38); the one-thread build's manifest key and `--threads one` (its lowering is
-  P40's).
+- The manifest's core counts (`[[exe]] runtime` and `threads`, `--runtime` and `--threads` are
+  built; `parallel` is refused until P38).
 - `moddil/sim` refused under `parallel`: its cells assume one task at a time.
 - Conformance on all four runners, which all run `runtime-sim` and so keep agreeing.
 
@@ -240,9 +239,8 @@ before and after (rc-heavy code, locks, tight loops): recorded, not gated.
   thread-safe allocator with per-thread caches. (The allocation count already takes no lock, and
   a lazy `const`'s value is computed by one task while the others wait.) A `const` whose
   computing traps in an isolated scope leaves the others waiting for it.
-- The one-thread build (`runtime.md`: Starting a program) passing `Threads::One` to native
-  builds, as WASM's are: atomics as plain reads and writes, no safe points, the task's number by
-  a call; the conformance suite also run in that build.
+- The conformance suite also run in the one-thread build (`--threads one`, built: atomics as
+  plain reads and writes, no safe points, the task's number by a call).
 
 **P41. Testing the parallel runtime** (`crates/rt` tests and benches, `tools/ci.py`,
 `conformance`; L, its logic half before P38's first stage).

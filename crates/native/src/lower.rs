@@ -390,11 +390,15 @@ pub(crate) struct Compiler<'db, M: Module> {
     threads: Threads,
 }
 
-/// How many threads the compiled code may run on at once: the lowering of atomics (`core.atomic.1`)
-/// follows it. A one-thread build, and WASM, read and write plainly.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum Threads {
+/// How many threads the compiled code may run on at once (`runtime.md`: Starting a program): a
+/// one-thread build, as WASM is, reads and writes atomics plainly (`core.atomic.1`), checks for
+/// preemption nowhere, and asks for the running task's number with a call.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Threads {
+    /// One thread: under the deterministic runtime only.
     One,
+    /// Several, as the parallel runtime runs tasks on.
+    #[default]
     Many,
 }
 
@@ -420,6 +424,7 @@ pub(crate) fn compile<'db>(
     db: &'db dyn Db,
     program: Program,
     item: Item,
+    threads: Threads,
 ) -> Result<Compiled<'db>, String> {
     let mut builder = JITBuilder::with_isa(isa(false)?, cranelift_module::default_libcall_names());
     // The runtime's functions, by the names the code calls them by.
@@ -434,7 +439,7 @@ pub(crate) fn compile<'db>(
         &[item],
         JITModule::new(builder),
         false,
-        Threads::Many,
+        threads,
     )?;
     let mut module = b.c.module;
     module.finalize_definitions().map_err(|e| e.to_string())?;
@@ -463,6 +468,7 @@ pub(crate) fn compile_object(
     program: Program,
     item: Item,
     lines: bool,
+    threads: Threads,
 ) -> Result<Vec<u8>, String> {
     let builder = cranelift_object::ObjectBuilder::new(
         isa(true)?,
@@ -476,7 +482,7 @@ pub(crate) fn compile_object(
         &[item],
         cranelift_object::ObjectModule::new(builder),
         lines,
-        Threads::Many,
+        threads,
     )?;
     let mut c = b.c;
     let files = files_of(db, program);

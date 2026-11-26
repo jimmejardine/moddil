@@ -35,6 +35,18 @@ pub enum Native {
 /// An observed `// =>` value: the file, the expression and its value as Moddil source.
 pub type Observed = (u32, TextRange, String);
 
+pub use lower::Threads;
+
+/// How a run or a build goes: the order its tasks run in, and how many threads its code may
+/// run on.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Options {
+    /// The deterministic runtime's seed (`task.runtime.1`): with 0, first in, first out.
+    pub seed: u64,
+    /// How many threads its code may run on.
+    pub threads: Threads,
+}
+
 /// Runs test `index` of `program` natively: its observed values, or why it gave none. The values
 /// observed before a trap are given with it.
 ///
@@ -43,21 +55,20 @@ pub type Observed = (u32, TextRange, String);
 /// [`Native::Unsupported`] if the test reaches code not compiled natively yet, and
 /// [`Native::Trap`] if it traps.
 pub fn run_test(db: &dyn Db, program: Program, index: u32) -> (Vec<Observed>, Result<(), Native>) {
-    run_test_seeded(db, program, index, 0)
+    run_test_with(db, program, index, Options::default())
 }
 
-/// As [`run_test`], its tasks run in the order seed `seed` picks (`task.runtime.1`): with 0,
-/// first in, first out.
-pub fn run_test_seeded(
+/// As [`run_test`], with `options`.
+pub fn run_test_with(
     db: &dyn Db,
     program: Program,
     index: u32,
-    seed: u64,
+    options: Options,
 ) -> (Vec<Observed>, Result<(), Native>) {
-    match lower::compile(db, program, Item::Test(index)) {
+    match lower::compile(db, program, Item::Test(index), options.threads) {
         Err(why) => (Vec::new(), Err(Native::Unsupported(why))),
         Ok(compiled) => {
-            let (observed, result, _) = compiled.run(None, seed);
+            let (observed, result, _) = compiled.run(None, options.seed);
             (observed, result.map(|_| ()))
         }
     }
@@ -85,8 +96,24 @@ pub fn run_main_exit(
     index: u32,
     args: Vec<String>,
 ) -> Result<(String, Option<u8>), Native> {
-    let compiled = lower::compile(db, program, Item::Fn(index)).map_err(Native::Unsupported)?;
-    let (_, result, exit) = compiled.run(Some(args), 0);
+    run_main_with(db, program, index, args, Options::default())
+}
+
+/// As [`run_main_exit`], with `options`.
+///
+/// # Errors
+///
+/// As [`run_main`].
+pub fn run_main_with(
+    db: &dyn Db,
+    program: Program,
+    index: u32,
+    args: Vec<String>,
+    options: Options,
+) -> Result<(String, Option<u8>), Native> {
+    let compiled = lower::compile(db, program, Item::Fn(index), options.threads)
+        .map_err(Native::Unsupported)?;
+    let (_, result, exit) = compiled.run(Some(args), options.seed);
     result.map(|shown| (shown, exit))
 }
 
@@ -98,7 +125,24 @@ pub fn run_main_exit(
 /// [`Native::Unsupported`] if it reaches code not compiled natively yet, or if `main` takes root
 /// capabilities or gives something other than `()` or `ExitCode`.
 pub fn build_object(db: &dyn Db, program: Program, index: u32) -> Result<Vec<u8>, Native> {
-    lower::compile_object(db, program, Item::Fn(index), false).map_err(Native::Unsupported)
+    build_object_with(db, program, index, false, Threads::Many)
+}
+
+/// As [`build_object`], with line tables if `release` (as [`build_release_object`]), for code
+/// that runs on `threads` threads.
+///
+/// # Errors
+///
+/// As [`build_object`].
+pub fn build_object_with(
+    db: &dyn Db,
+    program: Program,
+    index: u32,
+    release: bool,
+    threads: Threads,
+) -> Result<Vec<u8>, Native> {
+    lower::compile_object(db, program, Item::Fn(index), release, threads)
+        .map_err(Native::Unsupported)
 }
 
 /// As [`build_object`], for a release build: with the functions' line tables (DWARF), in an
@@ -108,7 +152,7 @@ pub fn build_object(db: &dyn Db, program: Program, index: u32) -> Result<Vec<u8>
 ///
 /// As [`build_object`].
 pub fn build_release_object(db: &dyn Db, program: Program, index: u32) -> Result<Vec<u8>, Native> {
-    lower::compile_object(db, program, Item::Fn(index), true).map_err(Native::Unsupported)
+    build_object_with(db, program, index, true, Threads::Many)
 }
 
 /// Compiles the `#[export]` functions `exports` of `program` (`ffi.export.1`) into an object

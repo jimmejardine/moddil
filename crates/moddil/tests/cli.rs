@@ -541,3 +541,43 @@ fn the_parallel_runtime_is_refused_until_it_is_built() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("not built yet"), "{stderr}");
 }
+
+#[test]
+fn a_one_thread_build_runs_as_the_threaded_one_does() {
+    let path = file("order-one.moddil", ORDER);
+    let out = moddil(&["test", "--threads", "one"], &path);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let out = moddil(
+        &["run", "--threads", "one"],
+        &file("fib-one.moddil", PROGRAM),
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "6765");
+    let out = moddil(&["test", "--threads", "two"], &path);
+    assert!(!out.status.success());
+}
+
+#[test]
+fn the_manifest_chooses_the_runtime_and_threads() {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cli-exe");
+    std::fs::create_dir_all(dir.join("src")).expect("a directory");
+    std::fs::write(dir.join("src/main.moddil"), "fn main() -> int { 1 }\n").expect("written");
+    let manifest = |exe: &str| {
+        let text = format!(
+            "[mod]\nname = \"exe\"\nedition = \"2027\"\n\n[[exe]]\nmain = \"src/main.moddil\"\n{exe}\n"
+        );
+        std::fs::write(dir.join("moddil.toml"), text).expect("written");
+    };
+    manifest("threads = \"one\"");
+    assert!(moddil(&["run"], &dir).status.success());
+    manifest("runtime = \"parallel\"");
+    let out = moddil(&["run"], &dir);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not built yet"));
+    manifest("threads = \"eight\"");
+    let out = moddil(&["run"], &dir);
+    assert!(String::from_utf8_lossy(&out.stderr).contains("E0704"));
+}

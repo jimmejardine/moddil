@@ -113,9 +113,10 @@ varied priorities: priority is per executor, and tasks within one are scheduled 
 
 **Decided: a program means the same under every runtime, and is compiled the same way.** Rc
 counts, locks and safe points always use the threaded lowering, so the tests under `runtime-sim`
-run the code that ships. The exception is a *one-thread build*, set when the program is built (a
-manifest key and `--threads one`), and always on WASM. It lowers Rc counts to plain counts,
-leaves out the safe points and makes locks without atomics; `runtime::parallel` refuses it. The
+run the code that ships. The exception is a *one-thread build*, set when the program is built
+(`[[exe]] threads = "one"` in the manifest, or `--threads one`), and always on WASM. It lowers Rc
+counts to plain counts, leaves out the safe points and makes locks without atomics;
+`runtime::parallel` refuses it. The
 cost of the threaded lowering on one thread is a few percent at most ([`memory.md`: Biased
 reference counting](memory.md#biased-reference-counting)).
 

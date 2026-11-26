@@ -72,6 +72,11 @@ pub struct Mod {
     pub c: Option<CTable>,
     /// Its version, from its manifest's `[mod] version` (`mod.1`), if it gives one.
     pub version: Option<String>,
+    /// What its executables' `[[exe]] runtime` says they run on (`task.runtime.1`): `sim` or
+    /// `parallel`, if it says.
+    pub runtime: Option<String>,
+    /// What their `[[exe]] threads` says: `one` for a one-thread build, or `many`, if it says.
+    pub threads: Option<String>,
 }
 
 /// What a manifest's `[mod]` table says.
@@ -157,6 +162,8 @@ pub fn load(path: &Path) -> Result<Project, Vec<Problem>> {
                 os_ok: false,
                 c: None,
                 version: None,
+                runtime: None,
+                threads: None,
             }],
         }),
         Err(e) => Err(vec![Problem {
@@ -271,6 +278,8 @@ impl Loader {
             os_ok: false,
             c: None,
             version: None,
+            runtime: None,
+            threads: None,
         });
         let m = Manifest {
             path: &manifest,
@@ -286,7 +295,7 @@ impl Loader {
         this.version = section.version;
         self.project.mods[index as usize].c = self.c_table(&m, dir);
         let (src_dir, root) = self.lib_root(&m, dir);
-        let exes = self.exes(&m, dir);
+        let exes = self.exes(&m, dir, index);
         self.module_tree(dir, &src_dir, root.as_deref(), &exes, index);
         let mut deps = Vec::new();
         for t in tables.iter().filter(|t| t.name == "dependencies") {
@@ -518,10 +527,30 @@ impl Loader {
         }
     }
 
-    /// `[[exe]] main`: each executable's main file.
-    fn exes(&mut self, m: &Manifest, dir: &Path) -> Vec<PathBuf> {
+    /// `[[exe]] main`: each executable's main file; and its `runtime` and `threads`, kept as mod
+    /// `index`'s.
+    fn exes(&mut self, m: &Manifest, dir: &Path, index: u32) -> Vec<PathBuf> {
         let mut out = Vec::new();
         for t in m.tables.iter().filter(|t| t.name == "exe") {
+            for p in &t.pairs {
+                let (allowed, why): (&[&str], _) = match p.key.as_str() {
+                    "runtime" => (&["sim", "parallel"], "`runtime` is \"sim\" or \"parallel\""),
+                    "threads" => (&["one", "many"], "`threads` is \"one\" or \"many\""),
+                    _ => continue,
+                };
+                match &p.value {
+                    Value::Str(s) if allowed.contains(&s.as_str()) => {
+                        let this = &mut self.project.mods[index as usize];
+                        let slot = if p.key == "runtime" {
+                            &mut this.runtime
+                        } else {
+                            &mut this.threads
+                        };
+                        *slot = Some(s.clone());
+                    }
+                    _ => self.problem("E0704", m.path, m.text, p.range.clone(), why.to_string()),
+                }
+            }
             let main = t
                 .pairs
                 .iter()

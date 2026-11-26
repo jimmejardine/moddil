@@ -883,6 +883,8 @@ mod tests {
                 os_ok: false,
                 c: None,
                 version: None,
+                runtime: None,
+                threads: None,
             }],
         };
         compare(
