@@ -1,5 +1,6 @@
 //! Randomness, as an effect (`effects-and-capabilities.md`: The effect catalogue).
 
+use core::atomic::{self, Ordering};
 use core::cell::UnsafeCell;
 
 /// A source of random choices.
@@ -20,10 +21,15 @@ const MODULUS: int = 2147483647;
 
 impl Seeded {
     fn next(&self) -> int {
+        // Tasks that share the source each take the next state: one atomic step, tried again
+        // if another task took it first.
         let p = self.state.get();
-        unsafe("one task runs at a time, and nothing else borrows the state") {
-            *p = *p * 48271 % MODULUS;
-            *p
+        loop {
+            let old = atomic::load(p, Ordering::Relaxed);
+            let new = old * 48271 % MODULUS;
+            if atomic::compare_exchange(p, old, new, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+                return new;
+            }
         }
     }
 }

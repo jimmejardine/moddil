@@ -12,7 +12,7 @@
 #![allow(unsafe_code)]
 
 use std::cell::{Cell, RefCell};
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU8, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use crate::baton::{self, Baton, DropFn, TaskFn};
@@ -142,6 +142,19 @@ pub(crate) fn enter_task(c: &Arc<Ctx>, t: usize) {
 /// worker.
 #[unsafe(export_name = "moddil_rt_task")]
 pub(crate) static RUNNING: AtomicI64 = AtomicI64::new(0);
+
+/// Set when the running task is to give way to others at its next safe point: a loop's
+/// back-edge or a call (`runtime.md`: a long CPU loop never yields). Nothing sets it under
+/// `runtime-sim`, whose tasks give way only where they suspend; a parallel runtime's timer
+/// thread sets a worker's.
+#[unsafe(export_name = "moddil_rt_preempt")]
+pub(crate) static PREEMPT: AtomicU8 = AtomicU8::new(0);
+
+/// At a safe point, with [`PREEMPT`] set: gives way.
+#[unsafe(export_name = "moddil_rt_safe_point")]
+pub(crate) extern "C" fn safe_point() {
+    PREEMPT.store(0, Ordering::Relaxed);
+}
 
 /// Records that task `t` is running now.
 pub(crate) fn running(t: usize) {

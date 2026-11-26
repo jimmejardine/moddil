@@ -198,6 +198,7 @@ half, then P38's stages, with P41's benchmarks as each lands (`runtime.md`).
 - `moddil run --runtime sim|parallel` and the manifest's runtime and core counts (`parallel`
   refused with a message until P38); the one-thread build's manifest key and `--threads one`
   (its lowering is P40's).
+- `moddil/sim` refused under `parallel`: its cells assume one task at a time.
 - Conformance on all four runners, which all run `runtime-sim` and so keep agreeing.
 
 **P38. The parallel runtime** (`crates/rt`, `crates/sched`, `crates/native`; L, after P37 and
@@ -212,7 +213,9 @@ P40, with P41's tests). In stages, each a commit with P41's suite green:
    threads (M:N).
 3. Workers and stealing: a worker per core with a Chase-Lev deque; stealing; parking and
    unparking with an event count; a spawned task first on its spawner's worker.
-4. Preemption: a timer thread sets the safe-point flags (P40); no signals.
+4. Preemption: a timer thread sets each worker's safe-point word (`moddil_rt_preempt`, one word
+   now), and `moddil_rt_safe_point` gives way; no signals. `pinned` executors' code leaves the
+   checks out.
 5. Executors (with priority inheritance: a task parked at a sync cell lends its executor's
    priority to the task holding it): `default` and `pool`, work-stealing; `pinned`, with core affinity, real-time
    priority and optional busy-polling, never lending; `blocking`, growing on demand, with
@@ -244,15 +247,9 @@ before and after (rc-heavy code, locks, tight loops): recorded, not gated.
   thread-safe allocator with per-thread caches. (The allocation count already takes no lock, and
   a lazy `const`'s value is computed by one task while the others wait.) A `const` whose
   computing traps in an isolated scope leaves the others waiting for it.
-- Preemption safe points: a flag check at loop back-edges and function entries, in MIR and
-  native code, off in `#[bounded]` hot paths and on `pinned` executors (`runtime.md`); inert
-  under `runtime-sim`.
-- An audit of every `UnsafeCell`, raw pointer and `core::atomic` use in the prelude, `core` and
-  the mods: each made safe for threads or confined to one task, with the reason in the
-  reference.
-- The one-thread lowering, on WASM and in a one-thread build (`runtime.md`: Starting a program):
-  plain rc counts and no safe points (atomics already lower plainly on WASM: `Threads::One` in
-  `crates/native`); the conformance suite also run in that build.
+- The one-thread build (`runtime.md`: Starting a program) passing `Threads::One` to native
+  builds, as WASM's are: atomics as plain reads and writes, no safe points, the task's number by
+  a call; the conformance suite also run in that build.
 
 **P41. Testing the parallel runtime** (`crates/rt` tests and benches, `tools/ci.py`,
 `conformance`; L, its logic half before P38's first stage).

@@ -133,6 +133,10 @@ pub extern "C" fn enter(site: u32, tracked: u8) -> u8 {
         return run::record_trap(site, tracked != 0);
     }
     run::STACK.with(|r| r.borrow_mut().push(site));
+    // A call is a safe point too.
+    if run::PREEMPT.load(std::sync::atomic::Ordering::Relaxed) != 0 {
+        run::safe_point();
+    }
     0
 }
 
@@ -422,6 +426,11 @@ pub fn symbols() -> Vec<(&'static str, *const u8)> {
         ("moddil_rt_yield_now", yield_now as *const u8),
         ("moddil_rt_task_id", task_id as *const u8),
         ("moddil_rt_park", park as *const u8),
+        ("moddil_rt_safe_point", run::safe_point as *const u8),
+        (
+            "moddil_rt_preempt",
+            std::ptr::addr_of!(run::PREEMPT).cast::<u8>(),
+        ),
         ("moddil_rt_unpark", unpark as *const u8),
         (
             "moddil_rt_task",

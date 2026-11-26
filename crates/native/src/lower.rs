@@ -284,6 +284,9 @@ struct Rt {
     /// The running task's number, which code that may run on several threads reads with one
     /// load (`moddil_rt::RUNNING`); a one-thread build calls `task_id` instead.
     running: Option<DataId>,
+    /// In code that may run on several threads, the word set when the running task is to give
+    /// way (`moddil_rt::PREEMPT`), and the call that does.
+    preempt: Option<(DataId, FuncId)>,
 }
 
 /// The runtime's task functions: each one's name, parameters and result.
@@ -723,7 +726,7 @@ pub(crate) fn build<'db, M: Module>(
             .declare_function(name, Linkage::Import, &sig)
             .map_err(|e| e.to_string())
     };
-    let rt = Rt {
+    let mut rt = Rt {
         trap: import("moddil_rt_trap", &[types::I32], Some(types::I8))?,
         trap_tracked: import("moddil_rt_trap_tracked", &[types::I32], Some(types::I8))?,
         float_fn: import(
@@ -826,15 +829,23 @@ pub(crate) fn build<'db, M: Module>(
             &[types::I32, types::I64, types::I64, types::I64, types::I64],
             Some(types::I64),
         )?,
-        running: match threads {
-            Threads::Many => Some(
-                module
-                    .declare_data("moddil_rt_task", Linkage::Import, false, false)
-                    .map_err(|e| e.to_string())?,
-            ),
-            Threads::One => None,
-        },
+        running: None,
+        preempt: None,
     };
+    if threads == Threads::Many {
+        let data = |module: &mut M, name: &str| {
+            module
+                .declare_data(name, Linkage::Import, false, false)
+                .map_err(|e| e.to_string())
+        };
+        rt.running = Some(data(&mut module, "moddil_rt_task")?);
+        let word = data(&mut module, "moddil_rt_preempt")?;
+        let sig = module.make_signature();
+        let give_way = module
+            .declare_function("moddil_rt_safe_point", Linkage::Import, &sig)
+            .map_err(|e| e.to_string())?;
+        rt.preempt = Some((word, give_way));
+    }
     let items = moddil_sema::item_tree(db, program);
     let mut c = Compiler {
         db,
@@ -1322,6 +1333,8 @@ impl<M: Module> Compiler<'_, M> {
             .map(|l| self.concrete(&l.ty, targs))
             .collect();
         let closure = matches!(item, Item::Closure(..));
+        let bounded = matches!(item, Item::Fn(f) if self.items.fns[f as usize].bounded);
+        let safe_points = self.rt.preempt.is_some() && !bounded;
         let mut ctx = self.module.make_context();
         ctx.func.signature = self.signature(params, ret, closure)?;
         let mut fctx = FunctionBuilderContext::new();
@@ -1333,6 +1346,7 @@ impl<M: Module> Compiler<'_, M> {
             file,
             tracked,
             closure,
+            safe_points,
             span: TextRange::default(),
             b: FunctionBuilder::new(&mut ctx.func, &mut fctx),
             locs: Vec::new(),
@@ -1431,6 +1445,7 @@ impl<M: Module> Compiler<'_, M> {
             file: 0,
             tracked: true,
             closure: false,
+            safe_points: false,
             span: TextRange::default(),
             b: FunctionBuilder::new(&mut ctx.func, &mut fctx),
             locs: Vec::new(),
@@ -2221,6 +2236,9 @@ struct Lower<'a, 'c, 'db, M: Module> {
     tracked: bool,
     /// Whether it is a closure's body, which takes its captures by pointer.
     closure: bool,
+    /// Whether its loops check for preemption at their back-edges: in code that may run on
+    /// several threads, unless the function is `#[bounded]` (`attr.bounded.1`).
+    safe_points: bool,
     /// Where the terminator being lowered is.
     span: TextRange,
     b: FunctionBuilder<'c>,
@@ -3558,14 +3576,47 @@ impl<M: Module> Lower<'_, '_, '_, M> {
 
     // ----- terminators -----------------------------------------------------------------------
 
+    /// Before a jump to one of `targets`: if one is a loop's back-edge (a block at or before
+    /// this one), a check of the preemption word, calling the runtime to give way when it is set
+    /// (`runtime.md`: a long CPU loop never yields).
+    fn safe_point(&mut self, targets: &[usize]) -> Result<(), String> {
+        let Some((word, give_way)) = self.c.rt.preempt else {
+            return Ok(());
+        };
+        if !self.safe_points || targets.iter().all(|&t| t > self.point.0) {
+            return Ok(());
+        }
+        let ptr = self.ptr();
+        let gv = self.c.module.declare_data_in_func(word, self.b.func);
+        let at = self.b.ins().symbol_value(ptr, gv);
+        let set = self
+            .b
+            .ins()
+            .load(types::I8, ir::MemFlagsData::trusted(), at, 0);
+        let slow = self.b.create_block();
+        let on = self.b.create_block();
+        self.b.set_cold_block(slow);
+        self.b.ins().brif(set, slow, &[], on, &[]);
+        self.b.switch_to_block(slow);
+        let f = self.c.module.declare_func_in_func(give_way, self.b.func);
+        self.b.ins().call(f, &[]);
+        self.b.ins().jump(on, &[]);
+        self.b.seal_block(slow);
+        self.b.switch_to_block(on);
+        self.b.seal_block(on);
+        Ok(())
+    }
+
     fn terminator(&mut self, t: &Terminator, span: TextRange) -> Result<(), String> {
         self.span = span;
         match t {
             Terminator::Goto(b) => {
+                self.safe_point(&[b.index()])?;
                 let b = self.block(b.index())?;
                 self.b.ins().jump(b, &[]);
             }
             Terminator::SwitchBool { cond, then, else_ } => {
+                self.safe_point(&[then.index(), else_.index()])?;
                 let c = self.value(cond)?;
                 let (y, n) = (self.block(then.index())?, self.block(else_.index())?);
                 self.b.ins().brif(c, y, &[], n, &[]);

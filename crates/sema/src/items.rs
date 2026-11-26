@@ -267,6 +267,8 @@ pub struct FnSig {
     pub effects: Vec<EffectSig>,
     /// Whether it is `#[track_caller]`: a trap in it is reported where its caller called it.
     pub track_caller: bool,
+    /// Whether it is `#[bounded]`: its loops are not preempted (`attr.bounded.1`).
+    pub bounded: bool,
     /// Whether it is `#[tag]`: a tagged literal `name"…"` calls it (`comptime.tag.1`).
     pub tag: bool,
     /// The control effects it lists (`with suspend, spawn`).
@@ -395,6 +397,7 @@ impl FnSig {
             fails_range: None,
             effects: Vec::new(),
             track_caller: false,
+            bounded: false,
             tag: false,
             control: 0,
             defaults: Vec::new(),

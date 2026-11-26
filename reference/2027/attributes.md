@@ -51,7 +51,12 @@ the traits of **attr.derive.1**, whose templates are the prelude's.
 **attr.track-caller.1** `#[track_caller]` before a function makes a trap in it be reported where it
 was called ([Traps](traps.md)), and through a tracked caller, where that one was called, up to the
 first function that is not tracked. The prelude's functions that can trap are tracked, and so is
-derived code. The attribute takes no arguments. Besides it, a function may have the wrappers
+derived code. The attribute takes no arguments.
+
+**attr.bounded.1** `#[bounded]` before a function says its loops are short: a runtime that runs
+tasks in parallel does not preempt them, as it may other loops at their back-edges, so a hot
+path pays no check ([`specs/runtime.md`](../../specs/runtime.md)). What the function does is
+unchanged. The attribute takes no arguments. Besides these two, a function may have the wrappers
 below; other attributes on functions are not supported yet (I0001).
 
 ## Wrappers

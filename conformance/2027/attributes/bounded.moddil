@@ -1,0 +1,14 @@
+// covers: attr.bounded.1
+
+#[bounded]
+fn sum(xs: &[int]) -> int {
+    let mut n = 0;
+    for x in xs {
+        n += *x;
+    }
+    n
+}
+
+test "a bounded function runs as any other" {
+    sum(&[1, 2, 3])  // => 6
+}

@@ -2,6 +2,9 @@
 //! each, and a simulated network between them. Time is the runtime's, which is virtual
 //! (`task.timer.1`), so a run that loses messages and waits out timeouts takes no real time, and
 //! the same seed replays it exactly.
+//!
+//! Its cells are changed with plain reads and writes: the simulation runs under `runtime-sim`,
+//! where one task runs at a time (`task.sched.1`).
 
 use core::cell::UnsafeCell;
 use net::{Conn, Listener, Net, NetError, Port};
