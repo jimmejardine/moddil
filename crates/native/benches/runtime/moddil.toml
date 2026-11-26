@@ -1,0 +1,6 @@
+[mod]
+name = "runtime_bench"
+edition = "2027"
+
+[dependencies]
+sync = { path = "../../../../mods/sync" }

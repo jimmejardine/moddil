@@ -9,10 +9,12 @@
 
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use crossbeam_deque::{Injector, Steal, Stealer, Worker};
 use moddil_sched::Executor;
+
+use crate::sleepers::Sleepers;
 
 /// What an executor is: 0 a pool, 1 pinned, 2 for blocking calls, 3 affine (`moddil/runtime`).
 const POOL: i64 = 0;
@@ -26,7 +28,7 @@ pub(crate) struct Queues {
     id: i64,
     shared: Injector<usize>,
     stealers: Vec<Stealer<usize>>,
-    asleep: Mutex<Vec<std::thread::Thread>>,
+    asleep: Sleepers,
     /// Whether its workers poll for a task rather than sleep.
     busy_poll: bool,
     /// Whether its workers take other executors' tasks when idle, and its tasks may be taken.
@@ -121,24 +123,12 @@ impl Queues {
 
     /// Wakes one of its workers asleep: whether one was.
     fn wake_one(&self) -> bool {
-        let w = self
-            .asleep
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .pop();
-        w.map(|w| w.unpark()).is_some()
+        self.asleep.wake_one()
     }
 
     /// Wakes every worker asleep: the run has ended.
     pub(crate) fn wake_all(&self) {
-        for w in self
-            .asleep
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .drain(..)
-        {
-            w.unpark();
-        }
+        self.asleep.wake_all();
     }
 
     /// The next task for this thread's worker, waiting (asleep, or polling) while there is none:
@@ -163,18 +153,18 @@ impl Queues {
                 std::thread::yield_now();
                 continue;
             }
-            // Asleep: a task queued after this looks again finds it, or wakes this worker.
-            self.asleep
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .push(std::thread::current());
-            if let Some(t) = find() {
-                return Some(t);
+            // Asleep: a task queued, or the run's end, after this looks again is seen by that
+            // look, or wakes this worker.
+            let seen = self.asleep.sleep(|| {
+                if self.over.load(Ordering::Acquire) {
+                    Some(None)
+                } else {
+                    find().map(Some)
+                }
+            });
+            if let Some(t) = seen {
+                return t;
             }
-            if self.over.load(Ordering::Acquire) {
-                return None;
-            }
-            std::thread::park();
         }
     }
 }
@@ -225,7 +215,7 @@ pub(crate) fn start(
         id,
         shared: Injector::new(),
         stealers: locals.iter().map(Worker::stealer).collect(),
-        asleep: Mutex::new(Vec::new()),
+        asleep: Sleepers::default(),
         busy_poll: e.kind == PINNED && e.busy_poll,
         lends,
         lenders: lenders.clone(),

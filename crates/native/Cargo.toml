@@ -30,5 +30,10 @@ object.workspace = true
 [dev-dependencies]
 moddil-project.workspace = true
 
+# The parallel runtime's benchmarks (P41), run by `ci.py bench`.
+[[bench]]
+name = "runtime"
+harness = false
+
 [lints]
 workspace = true

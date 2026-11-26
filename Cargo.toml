@@ -18,6 +18,8 @@ unsafe_code = "deny"
 missing_docs = "warn"
 unreachable_pub = "warn"
 unused_qualifications = "warn"
+# The runtime's builds for `loom` and `shuttle` (`ci.py loom`).
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(moddil_loom)", "cfg(moddil_shuttle)"] }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -72,6 +74,8 @@ crossbeam-deque = "0.8.8"   # the parallel runtime's work-stealing queues (`modd
 core_affinity = "0.8.3"     # pinning a pinned executor's workers to its cores (`moddil-rt`)
 thread-priority = "3.1.1"   # an executor's workers' priority (`moddil-rt`)
 windows-sys = "0.61.2"      # the NUMA nodes' cores on Windows (`moddil-rt`)
+loom = "0.7.3"              # the runtime's workers' sleeping, in every order (`ci.py loom`)
+shuttle = "0.9.10"          # and in random orders
 ctrlc = "3.5.3"             # Ctrl-C and termination as `core::os` signals (`moddil-os`)
 mio = { version = "1.2.5", features = ["os-poll", "net"] }  # the OS's wait for readiness: epoll, kqueue, IOCP (`moddil-os`)
 naga = { version = "30.0.2", features = ["wgsl-out", "wgsl-in"] }  # kernels to WGSL, validated (`moddil-gpu`)

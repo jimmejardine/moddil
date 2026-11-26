@@ -42,6 +42,9 @@ mod workers {
     /// How much stack a task reserves: committed as it is used, with a guard page below.
     const TASK_STACK: usize = 256 * 1024 * 1024;
 
+    /// How many stacks of ended tasks a run keeps for tasks to come.
+    const SPARE_STACKS: usize = 64;
+
     /// The run's own task, which runs on the thread that began the run, not on a worker.
     const HOST: usize = 0;
 
@@ -83,6 +86,9 @@ mod workers {
         queued: HashSet<usize>,
         /// The tasks a worker runs now.
         busy: HashSet<usize>,
+        /// The stacks of tasks that have ended, for tasks to come: reserving one costs far more
+        /// than running a short task.
+        stacks: Vec<DefaultStack>,
         /// Each executor's workers, once a task runs on it: under the deterministic runtime,
         /// the default one's alone, with one worker.
         groups: HashMap<i64, Group>,
@@ -170,7 +176,10 @@ mod workers {
                 s.baton.queued.remove(&t);
                 if let Some(spec) = s.baton.starts.remove(&t) {
                     let c = c.clone();
-                    let stack = DefaultStack::new(TASK_STACK).expect("a task's stack");
+                    let stack = match s.baton.stacks.pop() {
+                        Some(stack) => stack,
+                        None => DefaultStack::new(TASK_STACK).expect("a task's stack"),
+                    };
                     let co = Coroutine::with_stack(stack, move |y: &Yielder<(), Pause>, ()| {
                         set_yielder(y);
                         run_task(&c, t, spec);
@@ -199,7 +208,11 @@ mod workers {
             let mut s = c.lock();
             s.baton.busy.remove(&t);
             match r {
-                CoroutineResult::Return(()) => {}
+                CoroutineResult::Return(()) => {
+                    if s.baton.stacks.len() < SPARE_STACKS {
+                        s.baton.stacks.push(task.co.into_stack());
+                    }
+                }
                 // Left, not dropped: its stack holds frames that must not be unwound.
                 CoroutineResult::Yield(Pause::Abandon) => std::mem::forget(task),
                 CoroutineResult::Yield(Pause::Wait) => {

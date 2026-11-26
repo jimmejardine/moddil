@@ -1,0 +1,158 @@
+//! The parallel runtime's benchmarks (P41): each test one, whose count of operations its name
+//! ends with; `cargo bench -p moddil-native --bench runtime` runs each under the deterministic
+//! and the parallel runtime and shows what an operation costs.
+
+use sync::Mutex;
+
+test "spawn and join, 10000" {
+    let mut n = 0;
+    let mut i = 0;
+    while i < 100 {
+        n += scope(|s| {
+            let mut k = 0;
+            let mut sum = 0;
+            while k < 100 {
+                sum += s.spawn (|| 1).join();
+                k += 1;
+            }
+            sum
+        });
+        i += 1;
+    }
+    n  // => 10000
+}
+
+test "a task switch, 200000" {
+    let (tx, rx) = channel::<int>(0);
+    let (back, reply) = channel::<int>(0);
+    scope(|s| {
+        s.spawn (|| {
+            let mut i = 0;
+            while i < 50000 {
+                tx.send(i) ?! "open";
+                reply.recv();
+                i += 1;
+            }
+        });
+        s.spawn (|| {
+            let mut i = 0;
+            while i < 50000 {
+                rx.recv();
+                back.send(i) ?! "open";
+                i += 1;
+            }
+        });
+    });
+    1  // => 1
+}
+
+test "a channel's send and receive, 100000" {
+    let (tx, rx) = channel::<int>(64);
+    let total = scope(|s| {
+        s.spawn (|| {
+            let mut i = 0;
+            while i < 100000 {
+                tx.send(i) ?! "open";
+                i += 1;
+            }
+        });
+        let t = s.spawn (|| {
+            let mut n = 0;
+            let mut i = 0;
+            while i < 100000 {
+                n += rx.recv() ?! "sent";
+                i += 1;
+            }
+            n
+        });
+        t.join()
+    });
+    total  // => 4999950000
+}
+
+test "an uncontended lock, 1000000" {
+    let m = Mutex::new(0);
+    let mut i = 0;
+    while i < 1000000 {
+        *m.lock() += 1;
+        i += 1;
+    }
+    m.into_inner()  // => 1000000
+}
+
+test "a contended lock, 400000" {
+    let m = Mutex::new(0);
+    scope(|s| {
+        for _ in 0..4 {
+            s.spawn (|| {
+                let mut i = 0;
+                while i < 100000 {
+                    *m.lock() += 1;
+                    i += 1;
+                }
+            });
+        }
+    });
+    m.into_inner()  // => 400000
+}
+
+test "an rc's share and drop, 1000000" {
+    let a = 5.to_rc();
+    let mut i = 0;
+    let mut n = 0;
+    while i < 1000000 {
+        let b = a.share();
+        n += *b;
+        drop(b);
+        i += 1;
+    }
+    n  // => 5000000
+}
+
+test "an rc shared across tasks, 400000" {
+    let a = 1.to_rc();
+    let (tx, rx) = channel::<int>(4);
+    let total = scope(|s| {
+        for _ in 0..4 {
+            s.spawn (|| {
+                let mut n = 0;
+                let mut i = 0;
+                while i < 100000 {
+                    let b = a.share();
+                    n += *b;
+                    drop(b);
+                    i += 1;
+                }
+                tx.send(n) ?! "the receiver is here";
+            });
+        }
+        let mut sum = 0;
+        for _ in 0..4 {
+            sum += rx.recv() ?! "sent";
+        }
+        sum
+    });
+    total  // => 400000
+}
+
+test "a loop's iteration on every core, 320000000" {
+    let (tx, rx) = channel::<int>(32);
+    scope(|s| {
+        for _ in 0..32 {
+            s.spawn (|| {
+                let mut i = 0;
+                let mut n = 0;
+                while i < 10000000 {
+                    n += i % 7;
+                    i += 1;
+                }
+                tx.send(n) ?! "the receiver is here";
+            });
+        }
+    });
+    let mut sum = 0;
+    for _ in 0..32 {
+        sum += rx.recv() ?! "sent";
+    }
+    sum  // => 959999808
+}

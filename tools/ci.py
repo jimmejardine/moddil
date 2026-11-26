@@ -11,6 +11,11 @@ step, and the same script runs locally, so the two cannot drift.
 
 Steps: fmt, clippy, deny, test, tour, examples, links, grammars. Compatible with Python 3.8 (WSL's Ubuntu 20.04).
 
+Three more run only when named: `loom`, the parallel runtime's sleeping workers checked under
+`loom` (every order) and `shuttle` (random orders); `tsan`, the runtime's and scheduler's tests
+under ThreadSanitizer, on Linux with a nightly toolchain (`ci.py --wsl tsan`); and `bench`, the
+runtime's benchmarks, what each operation costs under each runtime (not gated).
+
 `quick` is not one of them: it checks what the uncommitted changes (`git status`) affect. It
 runs `cargo fmt`, the layout check on the changed `.moddil` files, the tests of each changed
 crate, and the conformance areas whose files changed (on all four implementations). It cannot
@@ -246,6 +251,37 @@ def step_grammars():
     return current and tools and parser
 
 
+def step_loom():
+    # Each its own build, as the `cfg` changes what the runtime is built from.
+    ok = True
+    for tool in ["loom", "shuttle"]:
+        ok = run("cargo", "test", "-q", "-p", "moddil-rt", "--lib", "sleepers",
+                 "--target-dir", str(ROOT / "target" / tool),
+                 env={"RUSTFLAGS": "--cfg moddil_" + tool, "RUST_MIN_STACK": "16777216"}) and ok
+    return ok
+
+
+def step_tsan():
+    if not sys.platform.startswith("linux"):
+        raise Skip("ThreadSanitizer runs on Linux here: `ci.py --wsl tsan`")
+    out = subprocess.run(["rustup", "toolchain", "list"], stdout=subprocess.PIPE,
+                         universal_newlines=True, cwd=str(Path.home())).stdout
+    if not any(line.startswith("nightly-") for line in out.splitlines()):
+        raise Skip("ThreadSanitizer needs a nightly toolchain: rustup toolchain install nightly "
+                   "--profile minimal --component rust-src; rustup target add "
+                   "wasm32-unknown-unknown --toolchain nightly")
+    # The sanitizer for the host's code only: the WASM runtime the build script makes has none.
+    # Coroutines' stacks it does not follow yet, so the runs of tasks are left out.
+    return run("cargo", "+nightly", "test", "-q", "-Zbuild-std", "--target",
+               "x86_64-unknown-linux-gnu", "-p", "moddil-rt", "-p", "moddil-sched", "--lib",
+               "--target-dir", str(ROOT / "target" / "tsan"),
+               env={"CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS": "-Zsanitizer=thread"})
+
+
+def step_bench():
+    return run("cargo", "bench", "-q", "-p", "moddil-native", "--bench", "runtime")
+
+
 STEPS = {
     "fmt": step_fmt,
     "clippy": step_clippy,
@@ -256,10 +292,14 @@ STEPS = {
     "links": step_links,
     "grammars": step_grammars,
     "quick": step_quick,
+    "loom": step_loom,
+    "tsan": step_tsan,
+    "bench": step_bench,
 }
 
-# The steps run when none are named: all but `quick`, which is a subset for working.
-DEFAULT = [name for name in STEPS if name != "quick"]
+# The steps run when none are named: all but `quick`, a subset for working, and `loom`, `tsan`
+# and `bench`, run when asked.
+DEFAULT = [name for name in STEPS if name not in ("quick", "loom", "tsan", "bench")]
 
 
 def check_toolchain():

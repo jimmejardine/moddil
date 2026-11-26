@@ -30,6 +30,8 @@ mod reactor;
 mod run;
 mod sched;
 pub mod sites;
+#[cfg(not(target_arch = "wasm32"))]
+mod sleepers;
 mod turns;
 
 #[cfg(target_arch = "wasm32")]

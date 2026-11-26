@@ -249,15 +249,15 @@ before and after (rc-heavy code, locks, tight loops): recorded, not gated.
 **P41. Testing the parallel runtime** (`crates/rt` tests and benches, `tools/ci.py`,
 `conformance`; L, its logic half before P38's first stage).
 - Logic (the conformance suite, every mod's tests and the stress suite run natively under
-  `parallel`, `item.test.value.2` marking what may differ, are built): `select` in the stress
-  suite; ThreadSanitizer builds of `moddil-rt` on Linux; the scheduler's Rust core (deques,
-  stealing, parking, merge queues) model-checked with `loom` and randomised with `shuttle`, as
-  P38's stages 2 and 3 make it.
-- Performance: benchmarks in `crates/rt/benches` and Moddil programs under `moddil bench`, each
-  with a budget: spawning, a task switch (tens of nanoseconds), channel ping-pong, `Mutex`
-  contention, shared and unshared `Rc` operations, reactor throughput, and scaling from 1 to N
-  cores on parallel map and tree work. CI runs the small budgets on every change; scaling to 64
-  and 128 cores runs on demand on a large machine.
+  `parallel`, `item.test.value.2` marking what may differ; the workers' sleeping under `loom` and
+  `shuttle`, `ci.py loom`; the runtime's and scheduler's tests under ThreadSanitizer, `ci.py
+  tsan`; are built): `select` in the stress suite; ThreadSanitizer over tasks, which crashes in
+  `__tsan_func_entry` on coroutines' stacks even with its fiber calls; `loom` over the deques,
+  the turns and the reactor, not only the sleeping.
+- Performance (`crates/native/benches/runtime`, `ci.py bench`: spawning, a switch, channels,
+  locks, `Rc`s, a loop on every core, under each runtime, are built): budgets that fail CI, and
+  scaling curves from 1 to 128 cores on a large machine. A spawn costs about 2.5 µs (`sim`) to
+  6.4 µs (`parallel`) and a switch about 0.8 µs: both still the run's one lock.
 
 **P42. The Hashiverse CLI/native client**, phase A, through the C ABI
 ([`examples/hashiverse.md`](examples/hashiverse.md); XL).

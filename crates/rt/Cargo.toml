@@ -25,3 +25,10 @@ thread-priority.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_System_SystemInformation", "Win32_System_Kernel"] }
+
+# The workers' sleeping, checked under `loom` and `shuttle` (`ci.py loom`).
+[target.'cfg(moddil_loom)'.dependencies]
+loom.workspace = true
+
+[target.'cfg(moddil_shuttle)'.dependencies]
+shuttle.workspace = true
