@@ -8,8 +8,10 @@ what `main` is given. Added in M2 slice M2d.
 **os.1** `core::os` gives a run its arguments (`arg_count`, `arg_len`, `arg_copy`), standard error
 (`write_stderr`), random numbers (`random`, greater than 0), the real time (`wall_clock`,
 nanoseconds since 1970-01-01T00:00:00 UTC, **os.clock.1**), TCP connections on the local machine
-(`listen`, `incoming`, `connect`, `arrivals`, `take`, `send`, `close`) and signals (`signals`: 1 for
-an interrupt, Ctrl-C or a `stop` line on standard input; 2 for a request to end). Handles are
+(`listen`, `incoming`, `connect`, `arrivals`, `take`, `send`, `close`), signals (`signals`: 1 for
+an interrupt, Ctrl-C or a `stop` line on standard input; 2 for a request to end) and the run's
+task tree as text (`task_tree_len`, `task_tree_copy`: a line for each task not ended, with what it
+waits for). Handles are
 numbers, and what the OS brings arrives on channels, so `select` waits on it: a listener's
 connections on `incoming`, how many bytes a connection has received on `arrivals`, which `take`
 then copies into a buffer, and once it ends, `arrivals` has no sender. A run of `main` has the OS,
