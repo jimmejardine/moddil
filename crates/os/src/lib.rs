@@ -4,14 +4,18 @@
 //! What the OS brings arrives as **events**, which a runtime's scheduler puts into the channels
 //! a program waits on: a connection a listener accepted, bytes a connection received, its end,
 //! or a signal. A scheduler with no task ready asks [`Os::poll`] for them, waiting until the next
-//! timer at most. Handles are numbers, so nothing here knows a program's values; bytes are copied
-//! into and out of the program's buffers.
+//! timer at most: in the OS's own wait for readiness (`mio`: epoll, kqueue, IOCP), which a signal
+//! wakes. Handles are numbers, so nothing here knows a program's values; bytes are copied into
+//! and out of the program's buffers.
 
 use std::collections::VecDeque;
 use std::io::{ErrorKind, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use mio::net::{TcpListener, TcpStream};
+use mio::{Interest, Poll, Token, Waker};
 
 /// A signal: an interrupt (Ctrl-C, or a `stop` line on standard input) or a request to end.
 pub const INTERRUPT: i64 = 1;
@@ -46,20 +50,36 @@ struct Conn {
     ended: bool,
 }
 
+/// What wakes a wait for readiness: a signal came.
+const WAKE: Token = Token(usize::MAX);
+
 /// The OS, as one run sees it.
 pub struct Os {
     handles: Vec<Handle>,
     signals: Option<Receiver<i64>>,
     args: Vec<String>,
+    /// The wait for readiness the handles are registered with.
+    poll: Poll,
+    waker: Arc<Waker>,
+    events: mio::Events,
 }
 
 impl Os {
     /// The OS for a run whose program was given `args` (after its name).
+    ///
+    /// # Panics
+    ///
+    /// If the OS gives no wait for readiness.
     pub fn new(args: Vec<String>) -> Os {
+        let poll = Poll::new().expect("the OS's wait for readiness");
+        let waker = Arc::new(Waker::new(poll.registry(), WAKE).expect("a waker"));
         Os {
             handles: Vec::new(),
             signals: None,
             args,
+            poll,
+            waker,
+            events: mio::Events::with_capacity(256),
         }
     }
 
@@ -73,8 +93,14 @@ impl Os {
     /// # Errors
     /// Why the port cannot be listened on.
     pub fn listen(&mut self, port: u16) -> Result<usize, String> {
-        let socket = TcpListener::bind(("127.0.0.1", port)).map_err(|e| e.to_string())?;
+        let socket = std::net::TcpListener::bind(("127.0.0.1", port)).map_err(|e| e.to_string())?;
         socket.set_nonblocking(true).map_err(|e| e.to_string())?;
+        let mut socket = TcpListener::from_std(socket);
+        let id = self.handles.len();
+        self.poll
+            .registry()
+            .register(&mut socket, Token(id), Interest::READABLE)
+            .map_err(|e| e.to_string())?;
         Ok(self.add(Handle::Listener {
             socket,
             watched: false,
@@ -86,13 +112,18 @@ impl Os {
     /// # Errors
     /// Why it cannot be made.
     pub fn connect(&mut self, host: &str, port: u16) -> Result<usize, String> {
-        let stream = TcpStream::connect((host, port)).map_err(|e| e.to_string())?;
-        self.add_conn(stream)
+        let stream = std::net::TcpStream::connect((host, port)).map_err(|e| e.to_string())?;
+        stream.set_nonblocking(true).map_err(|e| e.to_string())?;
+        self.add_conn(TcpStream::from_std(stream))
     }
 
-    fn add_conn(&mut self, stream: TcpStream) -> Result<usize, String> {
-        stream.set_nonblocking(true).map_err(|e| e.to_string())?;
+    fn add_conn(&mut self, mut stream: TcpStream) -> Result<usize, String> {
         let _ = stream.set_nodelay(true);
+        let id = self.handles.len();
+        self.poll
+            .registry()
+            .register(&mut stream, Token(id), Interest::READABLE)
+            .map_err(|e| e.to_string())?;
         Ok(self.add(Handle::Conn(Conn {
             stream,
             buf: VecDeque::new(),
@@ -122,16 +153,21 @@ impl Os {
             return;
         }
         let (tx, rx) = channel();
-        let ctrl = tx.clone();
+        let (ctrl, waker) = (tx.clone(), self.waker.clone());
         // Only one handler can be set per process; a second run in it shares the first's.
         let _ = ctrlc::set_handler(move || {
             let _ = ctrl.send(INTERRUPT);
+            let _ = waker.wake();
         });
+        let waker = self.waker.clone();
         std::thread::spawn(move || {
             let mut line = String::new();
             while std::io::stdin().read_line(&mut line).is_ok_and(|n| n > 0) {
-                if line.trim() == "stop" && tx.send(INTERRUPT).is_err() {
-                    break;
+                if line.trim() == "stop" {
+                    if tx.send(INTERRUPT).is_err() {
+                        break;
+                    }
+                    let _ = waker.wake();
                 }
                 line.clear();
             }
@@ -159,16 +195,31 @@ impl Os {
         let Some(Handle::Conn(c)) = self.handles.get_mut(conn) else {
             return Err("not a connection".to_string());
         };
-        c.stream.set_nonblocking(false).map_err(|e| e.to_string())?;
-        let r = c.stream.write_all(bytes).and_then(|()| c.stream.flush());
-        c.stream.set_nonblocking(true).map_err(|e| e.to_string())?;
-        r.map_err(|e| e.to_string())
+        // The socket does not block: what it cannot take yet, it is given again.
+        let mut rest = bytes;
+        while !rest.is_empty() {
+            match c.stream.write(rest) {
+                Ok(0) => return Err("the connection takes no more".to_string()),
+                Ok(n) => rest = &rest[n..],
+                Err(e) if e.kind() == ErrorKind::WouldBlock => std::thread::yield_now(),
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+        c.stream.flush().map_err(|e| e.to_string())
     }
 
     /// Closes listener or connection `id`.
     pub fn close(&mut self, id: usize) {
-        if let Some(Handle::Conn(c)) = self.handles.get(id) {
-            let _ = c.stream.shutdown(std::net::Shutdown::Both);
+        match self.handles.get_mut(id) {
+            Some(Handle::Conn(c)) => {
+                let _ = c.stream.shutdown(std::net::Shutdown::Both);
+                let _ = self.poll.registry().deregister(&mut c.stream);
+            }
+            Some(Handle::Listener { socket, .. }) => {
+                let _ = self.poll.registry().deregister(socket);
+            }
+            _ => {}
         }
         if let Some(h) = self.handles.get_mut(id) {
             *h = Handle::Closed;
@@ -188,14 +239,13 @@ impl Os {
     /// The events since the last poll, waiting up to `wait` (forever if `None`) for at least
     /// one.
     pub fn poll(&mut self, wait: Option<Duration>) -> Vec<Event> {
-        let until = wait.map(|w| Instant::now() + w);
-        loop {
-            let events = self.events();
-            if !events.is_empty() || until.is_some_and(|u| Instant::now() >= u) {
-                return events;
-            }
-            std::thread::sleep(Duration::from_millis(1));
+        // What is already there: readiness a handle had before it was watched is seen only so.
+        let events = self.events();
+        if !events.is_empty() {
+            return events;
         }
+        let _ = self.poll.poll(&mut self.events, wait);
+        self.events()
     }
 
     fn events(&mut self) -> Vec<Event> {

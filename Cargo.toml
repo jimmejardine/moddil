@@ -72,6 +72,7 @@ crossbeam-deque = "0.8.8"   # the parallel runtime's work-stealing queues (`modd
 core_affinity = "0.8.3"     # pinning a pinned executor's workers to its cores (`moddil-rt`)
 thread-priority = "3.1.1"   # an executor's workers' priority (`moddil-rt`)
 ctrlc = "3.5.3"             # Ctrl-C and termination as `core::os` signals (`moddil-os`)
+mio = { version = "1.2.5", features = ["os-poll", "net"] }  # the OS's wait for readiness: epoll, kqueue, IOCP (`moddil-os`)
 naga = { version = "30.0.2", features = ["wgsl-out", "wgsl-in"] }  # kernels to WGSL, validated (`moddil-gpu`)
 lsp-server = "0.10.0"       # the language server's JSON-RPC loop (`moddil-lsp`)
 lsp-types = "0.97.0"        # its messages

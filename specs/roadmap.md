@@ -352,6 +352,9 @@ native and interpreted runs do. A test that traps under `moddil test --wasm` is 
 properly; the `main` path (`run_main`, and the host's `main` command) is not.
 
 ## Known limits, with no package yet
+- On Linux, the CLI's test of the tour serving natively has its connection reset about one run
+  in five (`cli.rs`, `the_tour_serves_natively`), before and after the OS layer moved to `mio`;
+  draining or lingering on close did not change it.
 - The float functions other than `sqrt` are `libm`'s, not yet correctly rounded.
 - `String`'s inline size is 23 on every target (11 on 32-bit targets comes with them), and
   strings are byte by byte in Moddil, so slower in the interpreters.
