@@ -1,0 +1,120 @@
+// Time zones, checked against Python's `zoneinfo` on the same IANA release.
+
+use time::{Date, DateTime, LocalTime, Offset, TimeOfDay, Timestamp, Zone, tzdata_version, zones};
+
+fn zone(name: &str) -> Zone {
+    Zone::named(name) ?! "the test's zones are in the data"
+}
+
+fn at(secs: int) -> Timestamp {
+    Timestamp::from_unix_seconds(secs)
+}
+
+fn wall(y: int, mo: int, d: int, h: int, mi: int) -> DateTime {
+    let date = Date::new(y, mo, d) ?! "a date";
+    DateTime::new(date, TimeOfDay::new(h, mi, 0, 0) ?! "a time")
+}
+
+/// `t` in `z` is written `want`, with abbreviation `abbr`, and is daylight time if `dst`.
+fn shows(z: &Zone, t: int, want: &str, abbr: &str, dst: bool) {
+    let zt = z.at_instant(&at(t));
+    let s = zt.to_string();
+    let s: &str = &s;
+    assert(s == want);
+    assert(zt.abbreviation() == abbr && z.abbreviation_at(&at(t)) == abbr);
+    assert(zt.is_dst() == dst && z.is_dst_at(&at(t)) == dst);
+    assert(zt.timestamp() == at(t) && z.offset_at(&at(t)) == zt.offset());
+    assert(at(t).in_zone(z) == zt);
+}
+
+test "New York either side of its changes in 2024" {
+    let ny = zone("America/New_York");
+    assert(ny.name() == "America/New_York");
+    shows(&ny, 1710053999, "2024-03-10T01:59:59-05:00", "EST", false);
+    shows(&ny, 1710054000, "2024-03-10T03:00:00-04:00", "EDT", true);
+    shows(&ny, 1730613599, "2024-11-03T01:59:59-04:00", "EDT", true);
+    shows(&ny, 1730613600, "2024-11-03T01:00:00-05:00", "EST", false);
+}
+
+test "wall times skipped, shown twice, and shown once" {
+    let ny = zone("America/New_York");
+    assert(ny.local(&wall(2024, 3, 10, 2, 30)) == LocalTime::Gap(at(1710052200), at(1710055800)));
+    let fold = ny.local(&wall(2024, 11, 3, 1, 30));
+    assert(fold == LocalTime::Both(at(1730611800), at(1730615400)));
+    assert(fold.earliest() == at(1730611800) && fold.latest() == at(1730615400));
+    assert(fold.single().is_none());
+    let noon = ny.local(&wall(2024, 7, 4, 12, 0));
+    assert(noon.single() == Some(at(1720108800)));
+    // Apia skipped 30 December 2011, from −10:00 to +14:00.
+    let apia = zone("Pacific/Apia");
+    assert(apia.local(&wall(2011, 12, 30, 12, 0)) == LocalTime::Gap(at(1325196000), at(1325282400)));
+    shows(&apia, 1325239199, "2011-12-29T23:59:59-10:00", "-10", true);
+    shows(&apia, 1325239200, "2011-12-31T00:00:00+14:00", "+14", true);
+}
+
+test "odd offsets, and history" {
+    // British Standard Time, 1968 to 1971: an hour ahead all year, and not daylight time.
+    let london = zone("Europe/London");
+    shows(&london, 1252800, "1970-01-15T13:00:00+01:00", "BST", false);
+    shows(&london, 159019200, "1975-01-15T12:00:00+00:00", "GMT", false);
+    let kathmandu = zone("Asia/Kathmandu");
+    shows(&kathmandu, 1717200000, "2024-06-01T05:45:00+05:45", "+0545", false);
+    shows(&kathmandu, 328665600, "1980-06-01T05:30:00+05:30", "+0530", false);
+    // Lord Howe Island moves its clocks half an hour.
+    let lord_howe = zone("Australia/Lord_Howe");
+    shows(&lord_howe, 1705276800, "2024-01-15T11:00:00+11:00", "+11", true);
+    shows(&lord_howe, 1721001600, "2024-07-15T10:30:00+10:30", "+1030", false);
+    // Local mean time before the first change, with its seconds.
+    shows(&zone("America/New_York"), -5364662400, "1799-12-31T19:03:58-04:56:02", "LMT", false);
+}
+
+test "the rule after the last change, both hemispheres" {
+    let ny = zone("America/New_York");
+    shows(&ny, 4118385600, "2100-07-04T08:00:00-04:00", "EDT", true);
+    shows(&ny, 4102747200, "2100-01-04T07:00:00-05:00", "EST", false);
+    let sydney = zone("Australia/Sydney");
+    shows(&sydney, 4102747200, "2100-01-04T23:00:00+11:00", "AEDT", true);
+    shows(&sydney, 4118385600, "2100-07-04T22:00:00+10:00", "AEST", false);
+    // A rule on its own: New York's.
+    let rule = Zone::posix("EST5EDT,M3.2.0,M11.1.0") ?! "a rule";
+    assert(rule.name() == "EST5EDT,M3.2.0,M11.1.0");
+    shows(&rule, 1710054000, "2024-03-10T03:00:00-04:00", "EDT", true);
+    shows(&rule, 1730613600, "2024-11-03T01:00:00-05:00", "EST", false);
+    // Quoted abbreviations, a Julian day, and times past midnight.
+    let r = Zone::posix("<-03>3<-02>,J60/-1,300/26:30") ?! "a rule";
+    assert(r.offset_at(&at(0)).seconds() == -10800);
+    assert(Zone::posix("EST").is_none() && Zone::posix("EST5EDT,M13.1.0,M11.1.0").is_none());
+    assert(Zone::posix("EST5EDT").is_none() && Zone::posix("EST5 ").is_none());
+}
+
+test "names, links, fixed offsets and UTC" {
+    let kolkata = zone("Asia/Kolkata");
+    let calcutta = zone("Asia/Calcutta");
+    assert(calcutta.name() == "Asia/Calcutta");
+    shows(&calcutta, 1704067200, "2024-01-01T05:30:00+05:30", "IST", false);
+    assert(kolkata.offset_at(&at(0)) == calcutta.offset_at(&at(0)));
+    assert(Zone::named("Mars/Olympus_Mons").is_none() && Zone::named("").is_none());
+    assert(Zone::named("America/New_Yor").is_none());
+    let utc = zone("UTC");
+    shows(&utc, 0, "1970-01-01T00:00:00+00:00", "UTC", false);
+    shows(&Zone::utc(), 0, "1970-01-01T00:00:00+00:00", "+00:00", false);
+    let ist = Offset::new(5, 30) ?! "an offset";
+    assert(ist.seconds() == 19800 && Offset::new(-3, 30).map(|o| o.seconds()) == Some(-12600));
+    assert(Offset::new(26, 0).is_none() && Offset::new(1, 60).is_none());
+    let fixed = Zone::fixed(ist);
+    assert(fixed.name() == "+05:30");
+    shows(&fixed, 0, "1970-01-01T05:30:00+05:30", "+05:30", false);
+    assert(fixed.local(&wall(1970, 1, 1, 5, 30)) == LocalTime::One(at(0)));
+    let names = zones();
+    assert(names.len() > 500);
+    let mut i = 1;
+    while i < names.len() {
+        assert(names[i - 1] < names[i]);
+        // Every name has a zone; a sample of them is decoded.
+        if i % 23 == 0 {
+            assert(Zone::named(&names[i]).is_some());
+        }
+        i += 1;
+    }
+    assert(tzdata_version().len() == 5);
+}

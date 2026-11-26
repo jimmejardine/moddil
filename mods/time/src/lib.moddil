@@ -1,7 +1,8 @@
 //! Time without a clock (`stdlib.md`: Initial standard-mod catalogue): dates in the proleptic
-//! Gregorian calendar, times of day, and instants as nanoseconds since the Unix epoch, with
-//! ISO 8601 and RFC 3339 text. All UTC; time zones are not here yet. Reading the clock is the
-//! runtime's root capability `Clock`, whose `now()` is a `Timestamp`.
+//! Gregorian calendar, times of day, instants as nanoseconds since the Unix epoch, with ISO 8601
+//! and RFC 3339 text, and time zones from the IANA database, which the mod carries. Reading the
+//! clock is the runtime's root capability `Clock`, whose `now()` is a `Timestamp`.
 
 pub use mod::date::{Date, Weekday, days_in_month, is_leap_year};
 pub use mod::instant::{DateTime, TimeOfDay, Timestamp};
+pub use mod::zone::{LocalTime, Offset, Zone, ZonedDateTime, tzdata_version, zones};

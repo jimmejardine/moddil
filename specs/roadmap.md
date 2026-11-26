@@ -112,10 +112,6 @@ L)
   counting); the persistent map's iterator in O(1) per
   entry (needs a view that holds a stack of borrows).
 
-**P20. Time zones** (`mods/time`; M)
-- Time zones, from the zone data (IANA's `tzdata`, compiled into the mod or read through a root
-  capability).
-
 **P21. GPU kernels** (`crates/gpu`, `mods/gpu`, `core::gpu`; L)
 - Arrays and slices in a kernel (closures, `dyn` and text later).
 - A kernel's traps (overflow, a failed `?!`) checked on the GPU; `int` 64 bits there, not 32.

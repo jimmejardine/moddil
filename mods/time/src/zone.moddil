@@ -1,0 +1,601 @@
+//! Time zones: offsets from UTC, the IANA zones compiled into the mod (`mod::tzdata`), POSIX TZ
+//! rules, and wall times in a zone, both ways.
+//!
+//! A zone is its observances (an offset, whether it is daylight time, an abbreviation), the
+//! instants it changed from one to another, and a POSIX TZ rule (RFC 8536 3.3) for the instants
+//! after the last of them.
+
+use mod::date::{Date, days_in_month, padded};
+use mod::instant::{DateTime, Timestamp};
+use mod::tzdata::{NAMES, VERSION, zone};
+
+const NANOS_PER_SECOND: int = 1000000000;
+const SECONDS_PER_DAY: int = 86400;
+/// More than any offset from UTC is (POSIX allows up to 24:59:59).
+const MAX_OFFSET: int = 25 * 3600;
+
+const PLUS: int = 43;
+const COMMA: int = 44;
+const MINUS: int = 45;
+const DOT: int = 46;
+const SLASH: int = 47;
+const COLON: int = 58;
+const SEMICOLON: int = 59;
+const LESS: int = 60;
+const EQUALS: int = 61;
+const GREATER: int = 62;
+const J: int = 74;
+const M: int = 77;
+const BAR: int = 124;
+
+/// How far ahead of UTC a zone's clocks are, in seconds: `-04:00` in New York in summer.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct Offset {
+    seconds: int,
+}
+
+impl Offset {
+    /// UTC itself, `+00:00`.
+    pub fn utc() -> Offset {
+        Offset { seconds: 0 }
+    }
+
+    /// `hours` and `minutes` ahead of UTC, the minutes taking the hours' sign:
+    /// `Offset::new(-3, 30)` is `-03:30`. `None` past 25 hours or 59 minutes.
+    pub fn new(hours: int, minutes: int) -> Option<Offset> {
+        if minutes < 0 || minutes > 59 {
+            return None;
+        }
+        let m = hours * 60 + if hours < 0 { -minutes } else { minutes };
+        Offset::from_seconds(m * 60)
+    }
+
+    /// `seconds` ahead of UTC, if less than 25 hours either way.
+    pub fn from_seconds(seconds: int) -> Option<Offset> {
+        if seconds <= -MAX_OFFSET || seconds >= MAX_OFFSET {
+            return None;
+        }
+        Some(Offset { seconds })
+    }
+
+    pub fn seconds(&self) -> int {
+        self.seconds
+    }
+}
+
+/// `+05:30`, `-04:00`; with `:SS` when the offset has seconds, as local mean times do.
+impl Display for Offset {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        let s = if self.seconds < 0 { -self.seconds } else { self.seconds };
+        out.write_char(if self.seconds < 0 { '-' } else { '+' });
+        padded(out, s / 3600, 2);
+        out.write_char(':');
+        padded(out, s / 60 % 60, 2);
+        if s % 60 != 0 {
+            out.write_char(':');
+            padded(out, s % 60, 2);
+        }
+    }
+}
+
+/// What a zone's clocks show for a while: their offset, whether it is daylight time, and its
+/// abbreviation (`EDT`; a zone without one has its offset, `+0530`).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Observance {
+    offset: Offset,
+    dst: bool,
+    abbreviation: String,
+}
+
+/// The day of the year a rule changes on.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Day {
+    /// `Mm.w.d`: day `d` of the week (0 is Sunday) of week `w` of month `m`, week 5 the last.
+    Month(int, int, int),
+    /// `Jn`: day `n` from 1 to 365, 29 February never counted.
+    Julian(int),
+    /// `n`: day `n` from 0 to 365, 29 February counted.
+    Zero(int),
+}
+
+/// When a rule changes: its day, and the time of that day, in seconds of the wall clock before
+/// the change (negative, or past 24 hours, as RFC 8536 allows).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Change {
+    day: Day,
+    time: int,
+}
+
+/// A POSIX TZ rule: standard time, and daylight time between two changes each year.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Rule {
+    std: Observance,
+    dst: Option<Daylight>,
+}
+
+/// A rule's daylight time, and the changes to and from it each year.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Daylight {
+    observance: Observance,
+    start: Change,
+    end: Change,
+}
+
+impl Rule {
+    /// The observance at `t`, in Unix seconds.
+    fn at(&self, t: int) -> &Observance {
+        match &self.dst {
+            None    => &self.std,
+            Some(d) => {
+                let year = year_of(t + self.std.offset.seconds);
+                let s = d.start.instant(year) - self.std.offset.seconds;
+                let e = d.end.instant(year) - d.observance.offset.seconds;
+                let on = if s < e { s <= t && t < e } else { !(e <= t && t < s) };
+                if on { &d.observance } else { &self.std }
+            }
+        }
+    }
+}
+
+impl Change {
+    /// The change in `year`, in seconds since the epoch of the wall clock before it.
+    fn instant(&self, year: int) -> int {
+        let jan1 = day_number(year, 1, 1);
+        let day = match self.day {
+            Day::Julian(n)      => jan1 + n - 1 + if n >= 60 && days_in_month(year, 2) == 29 { 1 } else { 0 },
+            Day::Zero(n)        => jan1 + n,
+            Day::Month(m, w, d) => {
+                let first = day_number(year, m, 1);
+                // 1970-01-01 was a Thursday, day 4 counting Sunday as 0.
+                let wd = (first % 7 + 7 + 4) % 7;
+                let mut day = first + (d - wd + 7) % 7 + (w - 1) * 7;
+                while day >= first + days_in_month(year, m) {
+                    day -= 7;
+                }
+                day
+            }
+        };
+        day * SECONDS_PER_DAY + self.time
+    }
+}
+
+/// Days since the epoch of a date the rules name.
+fn day_number(year: int, month: int, day: int) -> int {
+    (Date::new(year, month, day) ?! "the rules' dates are dates").days_since_epoch()
+}
+
+/// The year of the instant `t`, in Unix seconds.
+fn year_of(t: int) -> int {
+    let d = t / SECONDS_PER_DAY;
+    let d = if t % SECONDS_PER_DAY < 0 { d - 1 } else { d };
+    Date::from_days_since_epoch(d).year()
+}
+
+/// A time zone: an IANA zone (`Zone::named("Europe/London")`), a POSIX TZ rule, or a fixed
+/// offset.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Zone {
+    name: String,
+    /// The observances the transitions name; the first is the one before them all.
+    observances: Vec<Observance>,
+    /// The instants the zone changed observance, in Unix seconds, in order.
+    times: Vec<int>,
+    /// The observance each of them changed to.
+    which: Vec<int>,
+    /// The observances from the last transition on.
+    rule: Rule,
+}
+
+impl Zone {
+    /// UTC.
+    pub fn utc() -> Zone {
+        Zone::fixed(Offset::utc())
+    }
+
+    /// A zone always `offset` ahead of UTC, named as the offset is written (`+05:30`).
+    pub fn fixed(offset: Offset) -> Zone {
+        let name = offset.to_string();
+        let std = Observance { offset, dst: false, abbreviation: name.clone() };
+        Zone { name, observances: [std.clone()], times: Vec::new(), which: Vec::new(), rule: Rule { std, dst: None } }
+    }
+
+    /// The IANA zone `name` (`America/New_York`, or a link to one: `US/Eastern`), if the data
+    /// the mod carries has it.
+    pub fn named(name: &str) -> Option<Zone> {
+        let data = zone(index_of(name)?);
+        decode(name, data)
+    }
+
+    /// The zone a POSIX TZ rule describes (`EST5EDT,M3.2.0,M11.1.0`), named as written.
+    pub fn posix(rule: &str) -> Option<Zone> {
+        let mut at = 0;
+        let rule_ = parse_rule(rule, &mut at)?;
+        if at != rule.len() {
+            return None;
+        }
+        Some(Zone { name: String::from_str(rule), observances: [rule_.std.clone()], times: Vec::new(), which: Vec::new(), rule: rule_ })
+    }
+
+    /// The name the zone was made with.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn at(&self, t: int) -> &Observance {
+        let n = self.times.len();
+        if n == 0 || t >= self.times[n - 1] {
+            return self.rule.at(t);
+        }
+        if t < self.times[0] {
+            return &self.observances[0];
+        }
+        // The last transition at or before `t`.
+        let mut lo = 0;
+        let mut hi = n - 1;
+        while lo < hi {
+            let mid = (lo + hi + 1) / 2;
+            if self.times[mid] <= t {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        &self.observances[self.which[lo]]
+    }
+
+    /// The zone's offset from UTC at `t`.
+    pub fn offset_at(&self, t: &Timestamp) -> Offset {
+        self.at(t.unix_seconds()).offset
+    }
+
+    /// The abbreviation of the zone's time at `t` (`EDT`).
+    pub fn abbreviation_at(&self, t: &Timestamp) -> &str {
+        &self.at(t.unix_seconds()).abbreviation
+    }
+
+    /// Whether the zone keeps daylight time at `t`.
+    pub fn is_dst_at(&self, t: &Timestamp) -> bool {
+        self.at(t.unix_seconds()).dst
+    }
+
+    /// The instant `t` in the zone: its wall time, offset and abbreviation.
+    pub fn at_instant(&self, t: &Timestamp) -> ZonedDateTime {
+        let o = self.at(t.unix_seconds());
+        let wall = Timestamp::from_unix_nanos(t.unix_nanos() + o.offset.seconds * NANOS_PER_SECOND);
+        ZonedDateTime { wall: wall.to_date_time(), offset: o.offset, dst: o.dst, abbreviation: o.abbreviation.clone(), instant: *t }
+    }
+
+    /// The instants the zone's clocks show `wall` at: one; two where they were set back and
+    /// showed it twice; or none where they were set forward past it.
+    pub fn local(&self, wall: &DateTime) -> LocalTime {
+        let local = wall.to_timestamp().unix_nanos();
+        let secs = wall.to_timestamp().unix_seconds();
+        // No zone changed by two days at once: the offsets either side are the candidates.
+        let before = self.at(secs - 2 * SECONDS_PER_DAY).offset.seconds;
+        let after = self.at(secs + 2 * SECONDS_PER_DAY).offset.seconds;
+        let a = Timestamp::from_unix_nanos(local - before * NANOS_PER_SECOND);
+        let b = Timestamp::from_unix_nanos(local - after * NANOS_PER_SECOND);
+        let a_ok = self.offset_at(&a).seconds == before;
+        let b_ok = self.offset_at(&b).seconds == after;
+        let (early, late) = if a < b { (a, b) } else { (b, a) };
+        if a_ok && b_ok && a != b { LocalTime::Both(early, late) } else if a_ok { LocalTime::One(a) } else if b_ok { LocalTime::One(b) } else { LocalTime::Gap(early, late) }
+    }
+}
+
+/// The instants a wall time names in a zone (`Zone::local`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LocalTime {
+    /// One instant.
+    One(Timestamp),
+    /// Two, earlier first: the clocks were set back, and showed the time twice.
+    Both(Timestamp, Timestamp),
+    /// None: the clocks were set forward past the time. The two instants are the wall time read
+    /// with the offset after the change (the earlier) and the one before it (the later).
+    Gap(Timestamp, Timestamp),
+}
+
+impl LocalTime {
+    /// The instant, if there is just one.
+    pub fn single(&self) -> Option<Timestamp> {
+        match self {
+            LocalTime::One(t) => Some(*t),
+            _                 => None,
+        }
+    }
+
+    /// The instant, or the earlier of the two.
+    pub fn earliest(&self) -> Timestamp {
+        match self {
+            LocalTime::One(t)     => *t,
+            LocalTime::Both(t, _) => *t,
+            LocalTime::Gap(t, _)  => *t,
+        }
+    }
+
+    /// The instant, or the later of the two.
+    pub fn latest(&self) -> Timestamp {
+        match self {
+            LocalTime::One(t)     => *t,
+            LocalTime::Both(_, t) => *t,
+            LocalTime::Gap(_, t)  => *t,
+        }
+    }
+}
+
+/// An instant as a zone's clocks show it.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ZonedDateTime {
+    wall: DateTime,
+    offset: Offset,
+    dst: bool,
+    abbreviation: String,
+    instant: Timestamp,
+}
+
+impl ZonedDateTime {
+    /// The wall time: the date and time of day the clocks show.
+    pub fn date_time(&self) -> DateTime {
+        self.wall
+    }
+
+    pub fn offset(&self) -> Offset {
+        self.offset
+    }
+
+    pub fn abbreviation(&self) -> &str {
+        &self.abbreviation
+    }
+
+    pub fn is_dst(&self) -> bool {
+        self.dst
+    }
+
+    pub fn timestamp(&self) -> Timestamp {
+        self.instant
+    }
+}
+
+/// RFC 3339 with the offset: `2024-03-10T03:00:00-04:00`.
+impl Display for ZonedDateTime {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        Display::fmt(&self.wall.date(), out);
+        out.write_char('T');
+        Display::fmt(&self.wall.time(), out);
+        Display::fmt(&self.offset, out);
+    }
+}
+
+/// The names of the zones the mod carries, the links among them, in order.
+pub fn zones() -> Vec<String> {
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at < NAMES.len() {
+        let mut end = at;
+        while byte(NAMES, end) != EQUALS {
+            end += 1;
+        }
+        out.push(String::from_str(NAMES.bytes_between(at, end)));
+        while end < NAMES.len() && byte(NAMES, end) != SEMICOLON {
+            end += 1;
+        }
+        at = end + 1;
+    }
+    out
+}
+
+/// The release of the IANA time zone database the mod carries (`2026f`).
+pub fn tzdata_version() -> &str {
+    VERSION
+}
+
+/// The index of the data of zone `name`, from the names table: `name=index;…`.
+fn index_of(name: &str) -> Option<int> {
+    let mut at = 0;
+    while at < NAMES.len() {
+        let mut end = at;
+        while byte(NAMES, end) != EQUALS {
+            end += 1;
+        }
+        let found = NAMES.bytes_between(at, end) == name;
+        end += 1;
+        let index = number(NAMES, &mut end)?;
+        if found {
+            return Some(index);
+        }
+        at = end + 1;
+    }
+    None
+}
+
+/// A zone from its data: `abbreviation,offset,dst;…|` its transitions `|` its rule.
+fn decode(name: &str, data: &str) -> Option<Zone> {
+    let mut at = 0;
+    let mut observances = Vec::new();
+    loop {
+        let start = at;
+        while byte(data, at) != COMMA {
+            at += 1;
+        }
+        let abbreviation = String::from_str(data.bytes_between(start, at));
+        at += 1;
+        let offset = Offset::from_seconds(signed(data, &mut at)?)?;
+        at += 1;
+        let dst = number(data, &mut at)? == 1;
+        observances.push(Observance { offset, dst, abbreviation });
+        let sep = byte(data, at);
+        at += 1;
+        if sep == BAR {
+            break;
+        }
+    }
+    let mut times = Vec::new();
+    let mut which = Vec::new();
+    let mut t = 0;
+    while byte(data, at) != BAR {
+        which.push(byte(data, at) - 97);
+        at += 1;
+        let v = signed(data, &mut at)?;
+        t = if times.is_empty() { v } else { t + v };
+        times.push(t);
+    }
+    at += 1;
+    let rule = parse_rule(data, &mut at)?;
+    Some(Zone { name: String::from_str(name), observances, times, which, rule })
+}
+
+/// The byte of `s` at `i` as a number, or -1 past its end.
+fn byte(s: &str, i: int) -> int {
+    if i >= s.len() {
+        return -1;
+    }
+    let b: int = s.byte_at(i);
+    b
+}
+
+fn is_digit(b: int) -> bool {
+    b >= 48 && b <= 57
+}
+
+/// The decimal number at `at`, which it moves past.
+fn number(s: &str, at: &mut int) -> Option<int> {
+    if !is_digit(byte(s, *at)) {
+        return None;
+    }
+    let mut v = 0;
+    while is_digit(byte(s, *at)) {
+        v = v * 10 + byte(s, *at) - 48;
+        *at += 1;
+    }
+    Some(v)
+}
+
+/// A number with an optional `-` or `+`.
+fn signed(s: &str, at: &mut int) -> Option<int> {
+    let b = byte(s, *at);
+    if b == MINUS || b == PLUS {
+        *at += 1;
+        let v = number(s, at)?;
+        return Some(if b == MINUS { -v } else { v });
+    }
+    number(s, at)
+}
+
+/// A POSIX TZ rule from `at`: `std offset [dst [offset] ,start[/time],end[/time]]`. The offsets
+/// are hours west of UTC (`EST5`), as POSIX writes them.
+fn parse_rule(s: &str, at: &mut int) -> Option<Rule> {
+    let std_name = abbreviation(s, at)?;
+    let std_offset = Offset::from_seconds(-clock(s, at)?)?;
+    let std = Observance { offset: std_offset, dst: false, abbreviation: std_name };
+    if *at == s.len() {
+        return Some(Rule { std, dst: None });
+    }
+    let dst_name = abbreviation(s, at)?;
+    let mut dst_offset = Offset::from_seconds(std_offset.seconds + 3600)?;
+    if byte(s, *at) != COMMA && *at < s.len() {
+        dst_offset = Offset::from_seconds(-clock(s, at)?)?;
+    }
+    // POSIX lets the dates be left out, for rules of its own choosing; the zone data never
+    // does.
+    if byte(s, *at) != COMMA {
+        return None;
+    }
+    *at += 1;
+    let start = change(s, at)?;
+    if byte(s, *at) != COMMA {
+        return None;
+    }
+    *at += 1;
+    let end = change(s, at)?;
+    let observance = Observance { offset: dst_offset, dst: true, abbreviation: dst_name };
+    Some(Rule { std, dst: Some(Daylight { observance, start, end }) })
+}
+
+/// An abbreviation: letters, or anything but `>` between `<` and `>` (`<+0530>`).
+fn abbreviation(s: &str, at: &mut int) -> Option<String> {
+    let start = *at;
+    if byte(s, start) == LESS {
+        *at += 1;
+        while byte(s, *at) != GREATER {
+            if *at >= s.len() {
+                return None;
+            }
+            *at += 1;
+        }
+        *at += 1;
+        if *at - start < 3 {
+            return None;
+        }
+        return Some(String::from_str(s.bytes_between(start + 1, *at - 1)));
+    }
+    while is_letter(byte(s, *at)) {
+        *at += 1;
+    }
+    if *at == start {
+        return None;
+    }
+    Some(String::from_str(s.bytes_between(start, *at)))
+}
+
+fn is_letter(b: int) -> bool {
+    (b >= 65 && b <= 90) || (b >= 97 && b <= 122)
+}
+
+/// `[+|-]hh[:mm[:ss]]`, in seconds.
+fn clock(s: &str, at: &mut int) -> Option<int> {
+    let b = byte(s, *at);
+    let sign = if b == MINUS { -1 } else { 1 };
+    if b == MINUS || b == PLUS {
+        *at += 1;
+    }
+    let mut t = number(s, at)? * 3600;
+    if byte(s, *at) == COLON {
+        *at += 1;
+        t += number(s, at)? * 60;
+        if byte(s, *at) == COLON {
+            *at += 1;
+            t += number(s, at)?;
+        }
+    }
+    Some(sign * t)
+}
+
+/// `Mm.w.d`, `Jn` or `n`, then an optional `/time` (02:00 when left out).
+fn change(s: &str, at: &mut int) -> Option<Change> {
+    let day = if byte(s, *at) == M {
+        *at += 1;
+        let m = number(s, at)?;
+        if byte(s, *at) != DOT {
+            return None;
+        }
+        *at += 1;
+        let w = number(s, at)?;
+        if byte(s, *at) != DOT {
+            return None;
+        }
+        *at += 1;
+        let d = number(s, at)?;
+        if m < 1 || m > 12 || w < 1 || w > 5 || d > 6 {
+            return None;
+        }
+        Day::Month(m, w, d)
+    } else if byte(s, *at) == J {
+        *at += 1;
+        let n = number(s, at)?;
+        if n < 1 || n > 365 {
+            return None;
+        }
+        Day::Julian(n)
+    } else {
+        let n = number(s, at)?;
+        if n > 365 {
+            return None;
+        }
+        Day::Zero(n)
+    };
+    let mut time = 7200;
+    if byte(s, *at) == SLASH {
+        *at += 1;
+        time = clock(s, at)?;
+    }
+    Some(Change { day, time })
+}

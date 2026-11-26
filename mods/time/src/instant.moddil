@@ -1,7 +1,8 @@
-//! Times of day, UTC date-times, and instants as nanoseconds since the Unix epoch (leap seconds
+//! Times of day, date-times, and instants as nanoseconds since the Unix epoch (leap seconds
 //! are not counted, as in Unix time), with RFC 3339 text.
 
 use mod::date::{Date, digits, padded};
+use mod::zone::{Zone, ZonedDateTime};
 
 const NANOS_PER_SECOND: int = 1000000000;
 const SECONDS_PER_DAY: int = 86400;
@@ -78,7 +79,8 @@ impl Display for TimeOfDay {
     }
 }
 
-/// A date and a time of day, in UTC.
+/// A date and a time of day: a `Timestamp`'s in UTC, or the wall time of a zone
+/// (`Zone::local`, `ZonedDateTime`).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct DateTime {
     date: Date,
@@ -104,7 +106,7 @@ impl DateTime {
     }
 }
 
-/// RFC 3339 in UTC: `2023-11-14T22:13:20Z`.
+/// RFC 3339 read as UTC: `2023-11-14T22:13:20Z`.
 impl Display for DateTime {
     fn fmt(&self, out: &mut dyn TextWrite) {
         Display::fmt(&self.date, out);
@@ -148,6 +150,11 @@ impl Timestamp {
     /// Nanoseconds from `earlier` to this instant: negative if `earlier` is later.
     pub fn nanos_since(&self, earlier: &Timestamp) -> int {
         self.nanos - earlier.nanos
+    }
+
+    /// The instant as `zone`'s clocks show it.
+    pub fn in_zone(&self, zone: &Zone) -> ZonedDateTime {
+        zone.at_instant(self)
     }
 
     pub fn to_date_time(&self) -> DateTime {

@@ -18,7 +18,7 @@ umbrella mod [`moddil`](moddil/README.md), which re-exports them.
 | [`sim`](sim/src/lib.moddil) | `Sim`, nodes, seeded randomness, a simulated network, `drop_messages` | `unsafe` |
 | [`crypto`](crypto/src/lib.moddil) | SHA-256, SHA-512 and BLAKE3, and `hex`; not constant-time | |
 | [`num`](num/src/lib.moddil) | `BigInt` and `Rational` | |
-| [`time`](time/src/lib.moddil) | `Date` (proleptic Gregorian), `TimeOfDay`, `DateTime` and `Timestamp`, in UTC, with ISO 8601 and RFC 3339 text; no clock yet | |
+| [`time`](time/src/lib.moddil) | `Date` (proleptic Gregorian), `TimeOfDay`, `DateTime` and `Timestamp`, with ISO 8601 and RFC 3339 text, and time zones: the IANA database compiled into the mod (`tools/zonedata.py`), POSIX TZ rules, and wall times both ways; no clock yet | |
 | [`regex`](regex/src/lib.moddil) | `Regex`: linear-time matching (a Pike VM), groups and named groups, `find_all`, `replace_all`; backreferences and lookaround refused | |
 | [`decimal`](decimal/src/lib.moddil) | `Fixed<S>` (the scale in the type) and `BigDecimal`, rounding by the prelude's `Round` | |
 | [`runtime`](runtime/src/lib.moddil) | the root capabilities (`root`: `Args`, `Stdio`, `NetRoot`, `Entropy`, …), the terminal (`io`), the `Cpus` capability and the executors made from it (`cpus`), `serve_until_stopped` and `Signal` | `os` |
