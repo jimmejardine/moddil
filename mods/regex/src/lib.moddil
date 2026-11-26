@@ -12,8 +12,8 @@
 //! cannot match in linear time, so a pattern using them is refused, naming `moddil/regex-backtrack`.
 //!
 //! `re"…"` is a tagged literal (`comptime.tag.1`): its pattern compiled when compiling, as static
-//! data, and a bad pattern an error at its place in the literal. Not here yet: typed captures, a
-//! field for each named group (`comptime.md`).
+//! data, and a bad pattern an error at its place in the literal. Its named groups are its fields
+//! (`comptime.tag.fields.1`): `re"(?<year>\d{4})".read(text)` gives a struct with a `year`.
 
 pub use mod::matching::{Captures, Match};
 pub use mod::program::{Regex, RegexError};

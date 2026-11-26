@@ -181,7 +181,7 @@ fn main() -> ExitCode {
         .iter()
         .map(|f| (f.display.clone(), f.text.clone()))
         .collect();
-    let db = Database::default();
+    let db = moddil_interp::database();
     let program = Program::of_project(&db, &project);
     let diagnostics = moddil_interp::diagnostics(&db, program);
     for d in &diagnostics {

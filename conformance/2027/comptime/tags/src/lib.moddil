@@ -1,4 +1,4 @@
-// covers: comptime.tag.1
+// covers: comptime.tag.1, comptime.tag.fields.1
 
 use regex::re;
 
@@ -23,4 +23,21 @@ test "a tagged block is dedented as a block is" {
         ab+
         """;
     r.is_match("abbb\n")  // => true
+}
+
+test "a literal whose value has fields reads a text into them" {
+    let date = re"(?<year>\d{4})-(?<month>\d{2})(-(?<day>\d{2}))?";
+    let d = date.read("on 2026-11, say") ?! "a date";
+    d.year  // => "2026"
+    ;
+    d.month  // => "11"
+    ;
+    d.day  // => None
+    ;
+    let full = date.read("2026-11-26") ?! "a date";
+    full.day  // => Some("26")
+    ;
+    date.read("no date")  // => None
+    ;
+    date.is_match("1999-01")  // => true
 }

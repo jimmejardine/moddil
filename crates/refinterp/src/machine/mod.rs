@@ -20,6 +20,7 @@ mod closures;
 mod effects;
 mod errors;
 mod exprs;
+mod fields;
 mod ops;
 mod patterns;
 pub(crate) mod tasks;
@@ -241,6 +242,11 @@ impl Machine<'_> {
     fn field_index(&self, v: &Value, name: &str) -> usize {
         match v {
             Value::Tuple(_) => name.parse().expect("a tuple index"),
+            // What a tagged literal's `read` gives: its fields by name (`comptime.tag.fields.1`).
+            Value::Adt { ty, variant, .. } if ty == fields::FIELDS => variant
+                .split(',')
+                .position(|f| f == name)
+                .expect("a checked field"),
             Value::Adt { ty, variant, .. } => self
                 .program
                 .variant(ty, variant)
@@ -296,11 +302,13 @@ impl Machine<'_> {
                 // (`expr.field.deref.1`).
                 if let ast::Expr::Field(_) = e
                     && let Value::Adt { ty, variant, .. } = self.memory.load(&p)
-                    && !self
-                        .program
-                        .variant(&ty, &variant)
-                        .fields
-                        .contains(&member_name(e.syntax()))
+                    && ty != fields::FIELDS
+                    && (ty == fields::WRAPPER
+                        || !self
+                            .program
+                            .variant(&ty, &variant)
+                            .fields
+                            .contains(&member_name(e.syntax())))
                 {
                     p = self
                         .deref_place(p, e.syntax().text_range())?
@@ -540,6 +548,14 @@ impl Machine<'_> {
     }
 
     pub(super) fn deref_place(&mut self, p: Pointer, range: TextRange) -> Eval<Option<Pointer>> {
+        // A tagged literal's wrapper dereferences to its value (`comptime.tag.fields.1`).
+        if let Value::Adt { ty, .. } = self.memory.load(&p)
+            && ty == fields::WRAPPER
+        {
+            let mut q = p;
+            q.path.push(0);
+            return Ok(Some(q));
+        }
         let head = self.memory.load(&p).head();
         let Some(m) = self.program.trait_method("Deref", &head, "deref") else {
             return Ok(None);

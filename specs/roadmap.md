@@ -25,10 +25,13 @@ Python teams and backend teams come before the browser (decided November 2026,
 [`adoption.md`: First audiences](adoption.md#first-audiences)).
 
 **P4. Text** (prelude `text`, `crates/sema`; M)
-- Typed captures for `re"…"`: a field for each named group, through a prelude `TagFields` trait
-  the tag's value implements, whose fields make a hidden struct (decided). Evaluating the tag
-  then happens while the program is collected, so it needs a sub-program of the tag's mod and its
-  dependencies, or an evaluator hook from the interpreter into sema.
+- A tagged literal's fields (`comptime.tag.fields.1`) of types other than `String` and
+  `Option<String>` (a `Match`, a number), named by the tag; and a way to name the struct `read`
+  gives, so a function can return one.
+- Fields for a tag taking `&[String]`, and for a tag of the literal's own mod (E1012 now): the
+  second needs the mod collected without the literals that use it first.
+- The reference interpreter's `read` result has its fields, but not the `Clone`, `Debug` and
+  `PartialEq` the compiled struct derives.
 - Raw tagged literals (`sqlr#"…"#`): the lexer gives them, but sema reads `sqlr#` as the tag.
   They would also let a hole of a tag taking `&[String]` hold a `"` (`comptime.tag.2`).
 - A `compile_error` in a tag taking `&[String]` reported at its bytes of the text, as for a tag

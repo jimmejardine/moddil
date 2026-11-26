@@ -68,6 +68,30 @@ the literal: `sql"… WHERE id = {user}"` gives the query and `user` apart. A ho
 which would end the literal; a `compile_error` (**comptime.error.1**) in such a tag is reported at
 the tag.
 
+**comptime.tag.fields.1** A tagged literal whose tag takes a `&str` and gives a value that
+implements the prelude's `TagFields` has **fields**: one for each name its value's
+`field_names()` gives, a `String` if that name's flag says every reading has it, or else an
+`Option<String>`. The literal is then its value in a wrapper that dereferences to it, so its own
+methods are the value's, and that has `read(text: &str)`: an `Option` of a struct with those
+fields, whose values are the value's `field_values(text)`, `None` if that is `None`. A field every
+reading has that a reading lacks traps. The wrapper and the struct are hidden types, which no code
+can name. The `moddil/regex` mod's `Regex` implements it, a field for each named group:
+
+```rust
+let date = re"(?<year>\d{4})-(?<month>\d{2})(-(?<day>\d{2}))?";
+let d = date.read("2026-11") ?! "a date";
+d.year                     // => "2026"
+d.day                      // => None
+```
+
+**comptime.tag.fields.2** A literal's fields are known before its program's bodies are checked,
+so its tag's `field_names()` is called while the program is collected: on the literal's text, in
+a program of only the tag's mod and the mods it depends on. So a tag whose value implements
+`TagFields` must come from another mod than the literal (E1012); and the field names must be
+distinct names, as a struct's fields are (E1012). Evaluating it is compile-time code as any other:
+a `compile_error` in it is reported in the literal's text (**comptime.error.1**, E1010), and a
+trap, or running out of fuel, is E1004.
+
 **comptime.error.1** `compile_error(message, start, end)`, a prelude function, ends compile-time
 code with an error, reported when compiling with `message` (E1010): at bytes `start` to `end` of
 the text of the tagged literal being evaluated, or at the const or block. Called when the program

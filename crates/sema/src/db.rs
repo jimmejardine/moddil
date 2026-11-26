@@ -157,17 +157,73 @@ impl Item {
 
 /// The queries `moddil-sema` defines need a database implementing this.
 #[salsa::db]
-pub trait Db: salsa::Database {}
+pub trait Db: salsa::Database {
+    /// What evaluates a tag while the program is collected (`comptime.tag.fields.2`), if
+    /// anything does: without one, a tagged literal has no fields.
+    fn evaluator(&self) -> Option<&dyn Evaluator> {
+        None
+    }
+}
+
+/// Evaluates a tag while a program is collected, for its literal's fields
+/// (`comptime.tag.fields.2`). `moddil-interp` gives one; sema cannot run code itself.
+pub trait Evaluator: Send + Sync + std::panic::RefUnwindSafe {
+    /// `TagFields::field_names` of the value of the tag `request` names, called with its
+    /// literal's text, in a program of the tag's mod and its dependencies.
+    fn tag_fields(&self, request: &TagRequest) -> TagAnswer;
+}
+
+/// A tag to evaluate for its literal's fields: the program of the tag's mod (mod 0) and its
+/// dependencies, the tag, and the literal's text.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TagRequest {
+    /// The program's files: each one's path, text, mod and module path.
+    pub files: Vec<(String, String, u32, Vec<String>)>,
+    /// Its mods.
+    pub mods: Vec<ModInfo>,
+    /// The module the tag is in, by its path in mod 0.
+    pub module: Vec<String>,
+    /// The tag's name.
+    pub tag: String,
+    /// The literal's text, as the tag is called with it.
+    pub text: String,
+}
+
+/// What evaluating a tag for its fields gave.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TagAnswer {
+    /// The fields: each one's name, and whether every reading has it.
+    Fields(Vec<(String, bool)>),
+    /// A `compile_error` (`comptime.error.1`): its message, and the bytes of the text it names.
+    CompileError(String, i64, i64),
+    /// Another failure (a trap, fuel run out, or the tag's program not compiling).
+    Failed(String),
+}
 
 /// The database: holds the inputs and memoises every query.
 #[salsa::db]
 #[derive(Clone, Default)]
 pub struct Database {
     storage: salsa::Storage<Self>,
+    evaluator: Option<std::sync::Arc<dyn Evaluator>>,
+}
+
+impl Database {
+    /// A database whose tags `evaluator` evaluates while programs are collected.
+    pub fn with_evaluator(evaluator: std::sync::Arc<dyn Evaluator>) -> Database {
+        Database {
+            storage: salsa::Storage::default(),
+            evaluator: Some(evaluator),
+        }
+    }
 }
 
 #[salsa::db]
 impl salsa::Database for Database {}
 
 #[salsa::db]
-impl Db for Database {}
+impl Db for Database {
+    fn evaluator(&self) -> Option<&dyn Evaluator> {
+        self.evaluator.as_deref()
+    }
+}

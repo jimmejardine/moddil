@@ -361,6 +361,30 @@ impl Lowerer<'_> {
         let quotes = if lit.starts_with("\"\"\"") { 3 } else { 1 };
         let at = (tag.len() + quotes) as u32;
         self.out.body.tagged.insert(block, at);
+        // A literal with fields is its value in the wrapper that reads them
+        // (`comptime.tag.fields.1`).
+        let (_, make) = crate::collect::wrapper_names(range);
+        if let Some(crate::Def::Fn(w)) =
+            self.types
+                .tree
+                .lookup(self.types.module, &make, self.types.prelude_first)
+        {
+            // Its type parameter, the value's type, inferred.
+            let callee = self.alloc(
+                ExprKind::Fn {
+                    func: w,
+                    args: vec![Ty::Infer(Ty::HOLE)],
+                },
+                range,
+            );
+            return self.alloc(
+                ExprKind::Call {
+                    callee,
+                    args: vec![block],
+                },
+                range,
+            );
+        }
         block
     }
 

@@ -46,12 +46,14 @@ impl Machine<'_> {
                         if parts {
                             return self.parts_tag(&f, &tok, range);
                         }
-                        self.invoke(
+                        let v = self.invoke(
                             &f,
                             vec![Value::Str(value.into())],
                             std::collections::HashMap::new(),
                             range,
-                        )
+                        )?;
+                        // With fields, if its value has them (`comptime.tag.fields.1`).
+                        self.with_fields(v, range)
                     }
                     None => Ok(literal(node, false)),
                 }

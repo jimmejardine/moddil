@@ -973,6 +973,7 @@ dependencies = [
  "moddil-sched",
  "moddil-sema",
  "moddil-syntax",
+ "salsa",
 ]
 
 [[package]]

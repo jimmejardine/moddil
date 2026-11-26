@@ -24,7 +24,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use moddil_project::Project;
-use moddil_sema::{Database, Program};
+use moddil_sema::Program;
 use moddil_syntax::{SyntaxKind, line_col};
 
 /// The edition the suite currently tests.
@@ -115,7 +115,7 @@ impl Implementation for MirInterpreter {
                 return outcome;
             }
         };
-        let db = Database::default();
+        let db = moddil_interp::database();
         let program = Program::of_project(&db, project);
         let mut outcome = Outcome {
             diagnostics: moddil_interp::diagnostics(&db, program)
@@ -170,7 +170,7 @@ impl Implementation for Native {
 
     fn run_if(&self, loaded: &Loaded) -> Option<Outcome> {
         let project = loaded.as_ref().ok()?;
-        let db = Database::default();
+        let db = moddil_interp::database();
         let program = Program::of_project(&db, project);
         if moddil_interp::has_errors(&db, program) {
             return None;
@@ -233,7 +233,7 @@ impl Implementation for Wasm {
 
     fn run_if(&self, loaded: &Loaded) -> Option<Outcome> {
         let project = loaded.as_ref().ok()?;
-        let db = Database::default();
+        let db = moddil_interp::database();
         let program = Program::of_project(&db, project);
         if moddil_interp::has_errors(&db, program) {
             return None;

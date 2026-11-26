@@ -23,7 +23,10 @@ use crate::{Code, Db, Diagnostic, SourceFile, Ty};
 mod adts;
 mod report;
 mod sigs;
+mod tags;
 mod templates;
+
+pub(crate) use tags::wrapper_names;
 
 pub(crate) use sigs::error_type;
 mod traits;
@@ -56,7 +59,7 @@ pub(crate) fn prelude_parse(db: &dyn Db, program: Program) -> Parse {
 
 /// The impls the derives of the prelude and the program's files expand to, and their parse.
 #[salsa::tracked(returns(ref))]
-pub(crate) fn derived(db: &dyn Db, program: Program) -> (Expansion, Parse) {
+pub(crate) fn derived_base(db: &dyn Db, program: Program) -> (Expansion, Parse) {
     let prelude = prelude_parse(db, program).syntax();
     let mut items: Vec<(Src, &str, SyntaxNode)> = prelude
         .children()
@@ -70,6 +73,29 @@ pub(crate) fn derived(db: &dyn Db, program: Program) -> (Expansion, Parse) {
         paths.push(file.module.clone());
     }
     let expansion = derive::expand(items.into_iter(), &paths);
+    let parse = moddil_syntax::parse(&expansion.text);
+    (expansion, parse)
+}
+
+/// The derived items: [`derived_base`]'s, then the hidden items of the tagged literals with
+/// fields (`comptime.tag.fields.1`), which come from the tree of the first.
+#[salsa::tracked(returns(ref))]
+pub(crate) fn derived(db: &dyn Db, program: Program) -> (Expansion, Parse) {
+    let (base, parse) = derived_base(db, program);
+    let tags = tags::tag_items(db, program);
+    if tags.lines.is_empty() {
+        return (base.clone(), parse.clone());
+    }
+    let mut expansion = base.clone();
+    for (line, f, range) in &tags.lines {
+        let start = expansion.text.len() as u32;
+        expansion.text.push_str(line);
+        let end = expansion.text.len() as u32;
+        expansion.text.push('\n');
+        expansion
+            .origins
+            .push((TextRange::new(start, end), Src::File(*f), *range));
+    }
     let parse = moddil_syntax::parse(&expansion.text);
     (expansion, parse)
 }
@@ -175,6 +201,22 @@ pub(crate) fn simple_binding(
 #[salsa::tracked(returns(ref))]
 pub fn item_tree(db: &dyn Db, program: Program) -> ItemTree {
     let (expansion, dparse) = derived(db, program);
+    let mut tree = collect(db, program, expansion, dparse);
+    tree.diagnostics
+        .extend(tags::tag_items(db, program).diagnostics.iter().cloned());
+    tree
+}
+
+/// The tree without the tagged literals' hidden items, which come from it
+/// (`comptime.tag.fields.2`): built only for a program with tagged literals.
+#[salsa::tracked(returns(ref))]
+pub(crate) fn item_tree_base(db: &dyn Db, program: Program) -> ItemTree {
+    let (expansion, dparse) = derived_base(db, program);
+    collect(db, program, expansion, dparse)
+}
+
+/// The tree of `program`'s items, with the derived items `expansion` (parsed as `dparse`).
+fn collect(db: &dyn Db, program: Program, expansion: &Expansion, dparse: &Parse) -> ItemTree {
     let mut sources = vec![(Src::Prelude, prelude_parse(db, program).syntax())];
     for (f, file) in program.files(db).iter().enumerate() {
         sources.push((Src::File(f as u32), parse(db, file.source).syntax()));
@@ -600,6 +642,7 @@ impl Collector<'_> {
             // A derive of a trait that is neither derivable nor a stub mod's was reported at
             // its attribute (`mod.stub.1`).
             if *src == Src::Derived
+                && !tags::is_wrapper_impl(node)
                 && let Some(tr) = derived_trait(node)
                 && !derive::DERIVABLE.contains(&tr.as_str())
                 && !self.stub_trait(&tr)

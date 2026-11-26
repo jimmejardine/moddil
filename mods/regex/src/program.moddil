@@ -60,6 +60,8 @@ pub struct Regex {
     /// Capture slots: two for each group, the whole match being group 0.
     pub(mod) slots: int,
     pub(mod) names: Vec<(String, int)>,
+    /// For each group, by number, whether every match has it.
+    pub(mod) every: Vec<bool>,
 }
 
 impl Regex {
@@ -71,7 +73,8 @@ impl Regex {
         c.node(&parsed, parsed.root);
         c.emit(Inst::Save(1));
         c.emit(Inst::Match);
-        Regex { prog: c.prog, slots: parsed.captures * 2, names: parsed.names }
+        let every = every_match_has(&parsed);
+        Regex { prog: c.prog, slots: parsed.captures * 2, names: parsed.names, every }
     }
 
     /// Whether the pattern matches somewhere in `text`.
@@ -115,6 +118,69 @@ impl Regex {
         }
         None
     }
+}
+
+/// A typed capture for each named group (`comptime.tag.fields.1`): `re"(?<year>\d{4})"` reads a
+/// text into a struct with a `year` field, a `String` if every match has the group, or else an
+/// `Option<String>`.
+impl TagFields for Regex {
+    fn field_names(&self) -> Vec<(String, bool)> {
+        let mut out = Vec::new();
+        for (name, k) in self.names.iter() {
+            out.push((name.clone(), self.every[*k]));
+        }
+        out
+    }
+
+    fn field_values(&self, text: &str) -> Option<Vec<Option<String>>> {
+        let Some(found) = self.captures(text) else {
+            return None;
+        };
+        let mut out = Vec::new();
+        for (_, k) in self.names.iter() {
+            out.push(match found.get(*k) {
+                Some(m) => Some(m.text(text).to_string()),
+                None    => None,
+            });
+        }
+        Some(out)
+    }
+}
+
+/// For each group of `parsed`, by number, whether every match has it: it is under no alternative,
+/// and no repetition that may not happen.
+const fn every_match_has(parsed: &Parsed) -> Vec<bool> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < parsed.captures {
+        out.push(false);
+        i += 1;
+    }
+    let mut stack = Vec::new();
+    stack.push((parsed.root, true));
+    while let Some((n, every)) = stack.pop() {
+        match &parsed.nodes[n] {
+            Node::Group(inner, capture) => {
+                if *capture > 0 {
+                    out[*capture] = every;
+                }
+                stack.push((*inner, every));
+            }
+            Node::Concat(parts) => {
+                for p in parts.iter() {
+                    stack.push((*p, every));
+                }
+            }
+            Node::Alt(parts) => {
+                for p in parts.iter() {
+                    stack.push((*p, false));
+                }
+            }
+            Node::Repeat(inner, min, _, _) => stack.push((*inner, every && *min > 0)),
+            _                              => {}
+        }
+    }
+    out
 }
 
 struct Compiler {

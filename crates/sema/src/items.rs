@@ -691,6 +691,7 @@ const LANG: &[&str] = &[
     "Index",
     "IndexMut",
     "Deref",
+    "TagFields",
     "DerefMut",
     "Box",
     "Rc",

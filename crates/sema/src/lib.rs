@@ -44,7 +44,10 @@ pub use check::{
     effects, infer, tuple_positions,
 };
 pub use collect::{item_tree, parse};
-pub use db::{Database, Db, FileId, Item, ModInfo, Owner, Program, ProgramFile, SourceFile};
+pub use db::{
+    Database, Db, Evaluator, FileId, Item, ModInfo, Owner, Program, ProgramFile, SourceFile,
+    TagAnswer, TagRequest,
+};
 pub use diag::{CODES, Code, Diagnostic, Severity};
 pub use items::{
     AdtDef, Container, Control, Def, EffectSig, Entry, FieldDef, FnSig, GenericParam, Generics,

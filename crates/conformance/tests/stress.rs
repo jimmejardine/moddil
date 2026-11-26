@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 
 use moddil_project::{File, Mod, Project};
-use moddil_sema::{Database, Program};
+use moddil_sema::Program;
 
 /// SplitMix64, to make the trees: the same trees every run.
 struct Rng(u64);
@@ -160,7 +160,7 @@ fn every_order_of_a_task_tree_gives_its_value() {
     let seeds = count("MODDIL_STRESS_SEEDS", 300);
     for i in 0..trees {
         let (text, want) = tree(i);
-        let db = Database::default();
+        let db = moddil_interp::database();
         let program = Program::of_project(&db, &project(&text));
         let diagnostics = moddil_interp::diagnostics(&db, program);
         assert!(diagnostics.is_empty(), "tree {i}: {diagnostics:?}\n{text}");
@@ -181,7 +181,7 @@ fn every_order_of_a_task_tree_gives_its_value() {
         }
         // The value: a `// =>` on the test's last line, checked by both.
         let checked = text.replace("    v\n}", &format!("    v  // => {want}\n}}"));
-        let db = Database::default();
+        let db = moddil_interp::database();
         let program = Program::of_project(&db, &project(&checked));
         for seed in [0, 1, seeds / 2, seeds.saturating_sub(1)] {
             let mut got = Vec::new();
@@ -217,7 +217,7 @@ fn a_task_tree_gives_its_value_in_parallel() {
     for i in 0..trees {
         let (text, want) = tree(i);
         let checked = text.replace("    v\n}", &format!("    v  // => {want}\n}}"));
-        let db = Database::default();
+        let db = moddil_interp::database();
         let program = Program::of_project(&db, &project(&checked));
         for run in 0..runs {
             let options = moddil_native::Options {

@@ -13,6 +13,7 @@ publish.workspace = true
 moddil-sched.workspace = true
 moddil-mir.workspace = true
 moddil-sema.workspace = true
+salsa.workspace = true
 moddil-syntax.workspace = true
 moddil-os.workspace = true
 moddil-ffi.workspace = true
