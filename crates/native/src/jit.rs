@@ -102,10 +102,17 @@ impl Compiled<'_> {
                 .spawn_scoped(s, move || {
                     // A new run, its tasks' threads joining this one's.
                     moddil_rt::begin_run();
+                    // A run of `main` draws its hash seed from the OS unless given one; a
+                    // test's is 0 unless given one (`coll.hash.2`).
+                    let hash_seed = match options.hash_seed {
+                        None if os.is_none() => Some(0),
+                        given => given,
+                    };
                     if let Some(args) = os {
                         moddil_rt::set_os(args);
                     }
                     moddil_rt::set_seed(options.seed);
+                    moddil_rt::set_hash_seed(hash_seed);
                     if options.parallel {
                         moddil_rt::set_workers(None);
                     }

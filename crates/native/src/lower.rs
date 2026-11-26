@@ -307,6 +307,7 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("task_id", &[], Some('w')),
     ("install_runtime", &['w', 'w'], None),
     ("parallel", &[], Some('b')),
+    ("hash_seed", &[], Some('w')),
     ("park", &['p', 'w', 's', 'b'], Some('b')),
     ("unpark", &['p', 'w'], Some('w')),
     ("stop_requested", &['s', 'b'], Some('b')),
@@ -4729,6 +4730,10 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             "parallel" => {
                 let p = self.task_call(op, &[]).expect("whether");
                 self.write(d, Val::Scalar(p))
+            }
+            "hash_seed" => {
+                let s = self.task_call(op, &[]).expect("a seed");
+                self.write(d, Val::Scalar(s))
             }
             "task_id" => {
                 let t = match self.c.rt.running {

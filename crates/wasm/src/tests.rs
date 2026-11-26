@@ -219,7 +219,7 @@ fn tests_observe_values() {
     if !host_available() {
         return;
     }
-    let runs = run_tests(&db, file, &[0, 1]).expect("ran");
+    let runs = run_tests(&db, file, &[0, 1], 0).expect("ran");
     let shown: Vec<Vec<&str>> = runs
         .iter()
         .map(|(observed, result)| {

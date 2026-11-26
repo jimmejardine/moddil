@@ -80,9 +80,13 @@ a `Hasher`, with `fn write_int(&mut self, x: int)` and `fn finish(&self) -> int`
 **coll.hash.derive.1** `#[derive(Hash)]` hashes an enum's variant's index, then each field in
 order ([Attributes](attributes.md)).
 
-**coll.hash.2** The `core` mod's default hasher, `SipHasher`, is SipHash-1-3 over `int`s, with a
-fixed key for now, so a map's order is the same on every run and implementation.
-`hash_of(&x)` is `x`'s hash under it.
+**coll.hash.2** The `core` mod's default hasher, `SipHasher`, is SipHash-1-3 over `int`s, keyed
+by the run's **hash seed**, so a map's order is the same under one seed, on every
+implementation, and differs between seeds. A run of `main` draws its hash seed from the OS; under
+`with Runtime = Runtime::seeded(n)` it is `n` (**task.runtime.1**). `moddil test` picks a fresh
+one for each run of the tests and prints it (`hash seed n`), and `--hash-seed n` gives it back,
+so a test that depends on map order fails visibly and can be repeated. The conformance tests run
+under hash seed 0. `hash_of(&x)` is `x`'s hash under it.
 
 ## Maps and sets
 

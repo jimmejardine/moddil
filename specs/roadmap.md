@@ -106,7 +106,6 @@ L)
 **P19. Standard collections** (`mods/collections`, prelude `rc`, `core::collections`; L)
 - `EnumSet`'s bits in the smallest unsigned integer that fits its enum, as `stdlib.md` decides
   (for packed structs and wire formats): a `u128` for now, chosen when compiling (P11).
-- The hasher keyed from `Rand`, with tests printing their seed, so map order differs per run.
 - Perceus-style reuse of a node no one else holds, as a pass on MIR (`mir.md`: Reference
   counting).
 

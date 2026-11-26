@@ -645,6 +645,7 @@ pub fn runtime_op(items: &moddil_sema::ItemTree, f: u32) -> Option<&'static str>
         ("", "__park") => "park",
         ("", "__install_runtime") => "install_runtime",
         ("", "__parallel") => "parallel",
+        ("", "__hash_seed") => "hash_seed",
         ("", "__executor_of_task") => "executor_of_task",
         ("", "__executor_new") => "executor_new",
         ("", "__unpark") => "unpark",

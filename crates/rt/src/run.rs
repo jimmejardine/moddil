@@ -720,10 +720,14 @@ pub extern "C" fn detach(t: u64) -> u8 {
     drop_all(dropped.into_iter().collect())
 }
 
-/// `with Runtime = …` (`task.runtime.1`): the deterministic runtime with seed `seed`.
+/// `with Runtime = …` (`task.runtime.1`): the deterministic runtime with seed `seed`, which is
+/// its hash seed too (`coll.hash.2`).
 #[unsafe(export_name = "moddil_rt_install_runtime")]
 pub(crate) extern "C" fn install_runtime(seed: i64, workers: i64) {
     with(|s| s.sched.set_seed(seed as u64));
+    if workers == 0 {
+        crate::set_hash_seed(Some(seed as u64));
+    }
     if workers != 0 {
         set_workers(usize::try_from(workers).ok());
     }

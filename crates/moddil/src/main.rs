@@ -78,6 +78,10 @@ enum Command {
         /// Run each with seeds 1 to `n` too, to find an order of its tasks it fails in.
         #[arg(long, default_value_t = 0, conflicts_with_all = ["wasm", "seed"])]
         seeds: u64,
+        /// The hash seed their maps' order comes from (`coll.hash.2`). By default a fresh one
+        /// each run, which it prints, so a test that depends on map order fails visibly.
+        #[arg(long)]
+        hash_seed: Option<u64>,
     },
     /// Compiles a program's `fn main()` ahead of time into an executable.
     Build {
@@ -133,6 +137,8 @@ enum Command {
         index: u32,
         #[arg(long, default_value_t = 0)]
         seed: u64,
+        #[arg(long)]
+        hash_seed: Option<u64>,
         #[arg(long)]
         threads: Option<String>,
         #[arg(long)]
@@ -283,12 +289,17 @@ fn main() -> ExitCode {
         Command::Run {
             wasm: true, args, ..
         } => run_wasm(&db, program, &files, &name, args),
-        Command::Test { wasm: true, .. } => test_wasm(&db, program, &files),
+        Command::Test {
+            wasm: true,
+            hash_seed,
+            ..
+        } => test_wasm(&db, program, &files, test_hash_seed(*hash_seed)),
         Command::Run { args, .. } => {
             let options = moddil_native::Options {
                 seed: 0,
                 threads,
                 parallel,
+                hash_seed: None,
             };
             run_native(&db, program, &files, &name, args.clone(), options)
         }
@@ -296,6 +307,7 @@ fn main() -> ExitCode {
             interp,
             seed,
             seeds,
+            hash_seed,
             ..
         } => {
             let seeds = if *seeds > 0 {
@@ -307,6 +319,7 @@ fn main() -> ExitCode {
                 seed: 0,
                 threads,
                 parallel,
+                hash_seed: Some(test_hash_seed(*hash_seed)),
             };
             test(&db, program, &files, *interp, path, &seeds, options)
         }
@@ -342,11 +355,17 @@ fn main() -> ExitCode {
             threads,
             &c,
         )),
-        Command::NativeTest { index, seed, .. } => {
+        Command::NativeTest {
+            index,
+            seed,
+            hash_seed,
+            ..
+        } => {
             let options = moddil_native::Options {
                 seed: *seed,
                 threads,
                 parallel,
+                hash_seed: *hash_seed,
             };
             native_test(&db, program, &files, *index, options)
         }
@@ -550,13 +569,35 @@ fn wasm_problem(e: &moddil_wasm::Wasm) -> String {
     }
 }
 
+/// The hash seed for a run of tests (`coll.hash.2`): `--hash-seed`'s, or a fresh one. It fits
+/// in 52 bits, so the WASM host's numbers hold it exactly.
+fn test_hash_seed(given: Option<u64>) -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    given.unwrap_or_else(|| {
+        let drawn = std::collections::hash_map::RandomState::new()
+            .build_hasher()
+            .finish();
+        drawn & ((1 << 52) - 1)
+    })
+}
+
+/// The line `moddil test` prints before its summary: the hash seed, and how to repeat it.
+fn show_hash_seed(seed: u64) {
+    println!("hash seed {seed} (`--hash-seed {seed}` gives its maps the same order)");
+}
+
 /// `moddil test --wasm`: the mod's tests compiled into one WebAssembly module, run in Node.
-fn test_wasm(db: &Database, program: Program, files: &[(String, String)]) -> ExitCode {
+fn test_wasm(
+    db: &Database,
+    program: Program,
+    files: &[(String, String)],
+    hash_seed: u64,
+) -> ExitCode {
     let items = moddil_sema::item_tree(db, program);
     let tests: Vec<u32> = (0..items.tests.len() as u32)
         .filter(|&i| items.mod_of(items.tests[i as usize].module) == 0)
         .collect();
-    let runs = match moddil_wasm::run_tests(db, program, &tests) {
+    let runs = match moddil_wasm::run_tests(db, program, &tests, hash_seed) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("moddil: {}", wasm_problem(&e));
@@ -596,6 +637,7 @@ fn test_wasm(db: &Database, program: Program, files: &[(String, String)]) -> Exi
             }
         }
     }
+    show_hash_seed(hash_seed);
     println!("{} passed, {failed} failed", tests.len() - failed);
     if failed == 0 {
         ExitCode::SUCCESS
@@ -682,6 +724,7 @@ fn native_child(path: &Path, index: u32, name: &str, options: moddil_native::Opt
             .arg(path)
             .arg(index.to_string())
             .arg(format!("--seed={}", options.seed))
+            .arg(format!("--hash-seed={}", options.hash_seed.unwrap_or(0)))
             .arg(format!("--threads={threads}"))
             .arg(format!(
                 "--runtime={}",
@@ -1091,7 +1134,7 @@ fn test(
             let mut run = None;
             for &seed in seeds {
                 let r = if interp {
-                    interp_test(db, program, files, i, seed)
+                    interp_test(db, program, files, i, seed, options.hash_seed.unwrap_or(0))
                 } else {
                     let options = moddil_native::Options { seed, ..options };
                     native_child(path, i, &items.tests[i as usize].name, options)
@@ -1117,6 +1160,7 @@ fn test(
             failed += 1;
         }
     }
+    show_hash_seed(options.hash_seed.unwrap_or(0));
     println!("{} passed, {failed} failed", tests.len() - failed);
     if failed == 0 {
         ExitCode::SUCCESS
@@ -1132,14 +1176,21 @@ fn interp_test(
     files: &[(String, String)],
     index: u32,
     seed: u64,
+    hash_seed: u64,
 ) -> TestRun {
     let items = moddil_sema::item_tree(db, program);
     let t = &items.tests[index as usize];
     let mut observed = Vec::new();
-    let result =
-        moddil_interp::run_test_seeded(db, program, index, seed, &mut |file, range, value| {
+    let result = moddil_interp::run_test_hashed(
+        db,
+        program,
+        index,
+        seed,
+        hash_seed,
+        &mut |file, range, value| {
             observed.push((file, range, value.render(items)));
-        });
+        },
+    );
     let mut err = Vec::new();
     let (passed, how) = match result {
         Ok(()) => {

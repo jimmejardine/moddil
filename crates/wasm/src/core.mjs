@@ -617,6 +617,8 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
     drop: (k) => call(prog['moddil_drop_result' + suffix(k)], [BigInt(L.out)]),
     /** How many allocations are not freed. */
     live: () => Number(rt.moddil_wasm_live()),
+    /** Sets the run's hash seed (`coll.hash.2`), given as decimal text. */
+    hashSeed: (s) => rt.moddil_wasm_hash_seed(BigInt(s)),
     /** What the run recorded, as words (`moddil_wasm_record`). */
     record: () => {
       const n = rt.moddil_wasm_record(L.record, L.words);

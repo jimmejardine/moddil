@@ -477,10 +477,16 @@ fn trap_of(
 ///
 /// [`Wasm::Unsupported`] if any of them reaches code not compiled to WASM yet, and
 /// [`Wasm::NoHost`] if there is no Node to run them in.
-pub fn run_tests(db: &dyn Db, program: Program, tests: &[u32]) -> Result<TestRuns, Wasm> {
+pub fn run_tests(
+    db: &dyn Db,
+    program: Program,
+    tests: &[u32],
+    hash_seed: u64,
+) -> Result<TestRuns, Wasm> {
     let items: Vec<Item> = tests.iter().map(|t| Item::Test(*t)).collect();
     let c = compile(db, program, &items).map_err(Wasm::Unsupported)?;
     let mut host = Host::start(&c)?;
+    host.ask(&format!("hashseed {hash_seed}"))?;
     let mut out = Vec::new();
     for k in 0..items.len() {
         let (observed, result) = run_entry(&c, &mut host, k);

@@ -6,6 +6,7 @@
 //                  {"s": status}; while it runs, `signal n` lines are signals for it (`os.1`)
 //   drop k         entry k's drop of its result: {"s": status}, or {"crash": why}
 //   live           how many allocations are not freed: {"n": n}
+//   hashseed n     the run's hash seed is n: {"s": 0}
 //   record         what the run recorded: {"w": "word,word,..."}
 //   read a n       n bytes of memory from a: {"hex": "..."}
 //   go             (while an observation waits) the run goes on
@@ -173,6 +174,9 @@ if (isMainThread) {
         say({ hex: hex(a, b) });
       } else if (cmd === 'live') {
         say({ n: p.live() });
+      } else if (cmd === 'hashseed') {
+        p.hashSeed(a);
+        say({ s: 0 });
       } else if (cmd === 'record') {
         say({ w: p.record().join(',') });
       } else if (cmd === 'main') {

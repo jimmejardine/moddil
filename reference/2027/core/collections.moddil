@@ -1,7 +1,14 @@
 // The built-in `core` mod's `collections` module: `use core::collections::HashMap;`. Every mod
-// depends on `core`. For now its key is fixed, so a map's order is the same on every run.
+// depends on `core`. Its hasher is keyed by the run's hash seed, so a map's order is the same
+// under one seed and differs between them (`coll.hash.2`).
 
-// The default hasher: SipHash-1-3 (`coll.hash.2`), over `int`s.
+// The run's hash seed: drawn from the OS, set by `moddil test` (which prints it), or the seed of
+// the deterministic runtime `main` installs.
+#[intrinsic]
+fn __hash_seed() -> int;
+
+// The default hasher: SipHash-1-3 (`coll.hash.2`), over `int`s, keyed by the run's hash seed:
+// under seed 0 its key is 0x0706…00, 0x0f0e…08.
 pub struct SipHasher {
     v0: int,
     v1: int,
@@ -11,8 +18,9 @@ pub struct SipHasher {
 
 impl SipHasher {
     pub fn new() -> SipHasher {
-        let k0 = 0x0706050403020100;
-        let k1 = 0x0f0e0d0c0b0a0908;
+        let seed = __hash_seed();
+        let k0 = 0x0706050403020100 ^ seed;
+        let k1 = 0x0f0e0d0c0b0a0908 ^ seed.rotate_left(32);
         SipHasher {
             v0: k0 ^ 0x736f6d6570736575,
             v1: k1 ^ 0x646f72616e646f6d,
@@ -248,7 +256,9 @@ impl<K: Hash + Eq, V> FromArrayLiteral<(K, V)> for HashMap<K, V> {
         m
     }
 
-    fn from_repeat(x: (K, V), n: int) -> HashMap<K, V> where (K, V): Clone {
+    fn from_repeat(x: (K, V), n: int) -> HashMap<K, V>
+        where (K, V): Clone
+    {
         let mut m = HashMap::new();
         if n > 0 {
             let (k, v) = x;
@@ -304,7 +314,7 @@ impl<T> Iterator for SetIter<T> {
     fn next(&mut self) -> Option<&T> {
         match self.inner.next() {
             Some((x, _)) => Some(x),
-            None => None,
+            None         => None,
         }
     }
 }
@@ -344,7 +354,9 @@ impl<T: Hash + Eq> FromArrayLiteral<T> for HashSet<T> {
         s
     }
 
-    fn from_repeat(x: T, n: int) -> HashSet<T> where T: Clone {
+    fn from_repeat(x: T, n: int) -> HashSet<T>
+        where T: Clone
+    {
         let mut s = HashSet::new();
         if n > 0 {
             s.insert(x);

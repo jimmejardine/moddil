@@ -129,18 +129,23 @@ test "literals" {
     s.len()  // => 2
 }
 
-test "the hash is the same on every run" {
-    hash_of(&0) == hash_of(&0)  // => true
-    ;
-    hash_of(&1) == hash_of(&2)  // => false
-    ;
-    // Hash order under the fixed key: the same on every run and implementation.
+/// The order a set of 1 to 4 iterates in, as digits.
+fn order_of_four() -> int {
     let mut order = 0;
     let s: HashSet<int> = [1, 2, 3, 4];
     for x in &s {
         order = order * 10 + *x;
     }
-    order  // => 4213
+    order
+}
+
+test "hash order is the hash seed's" {
+    hash_of(&0) == hash_of(&0)  // => true
+    ;
+    hash_of(&1) == hash_of(&2)  // => false
+    ;
+    // A test here runs under hash seed 0, the same on every implementation.
+    order_of_four()  // => 4213
 }
 
 test "sets remove and iterate" {

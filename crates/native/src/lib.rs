@@ -48,6 +48,9 @@ pub struct Options {
     /// Whether its tasks run under the parallel runtime, one a core (`task.runtime.1`), when its
     /// `main` installs no runtime.
     pub parallel: bool,
+    /// The run's hash seed (`coll.hash.2`). If `None`, a run of `main` draws one from the OS
+    /// and a test's is 0.
+    pub hash_seed: Option<u64>,
 }
 
 /// Runs test `index` of `program` natively: its observed values, or why it gave none. The values

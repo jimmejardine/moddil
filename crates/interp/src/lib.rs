@@ -407,8 +407,36 @@ pub fn run_test_seeded(
     seed: u64,
     observer: Observer<'_>,
 ) -> Result<(), Stop> {
+    run_test_hashed(db, program, index, seed, 0, observer)
+}
+
+/// As [`run_test_seeded`], its maps in the order hash seed `hash_seed` gives (`coll.hash.2`):
+/// with 0, the order every implementation's conformance tests see.
+///
+/// # Errors
+///
+/// As [`run_test`].
+pub fn run_test_hashed(
+    db: &dyn Db,
+    program: Program,
+    index: u32,
+    seed: u64,
+    hash_seed: u64,
+    observer: Observer<'_>,
+) -> Result<(), Stop> {
     let item = Item::Test(index);
-    machine::run_seeded(db, program, item, &[], observer, None, None, seed).map(|_| ())
+    machine::run_seeded(
+        db,
+        program,
+        item,
+        &[],
+        observer,
+        None,
+        None,
+        seed,
+        Some(hash_seed),
+    )
+    .map(|_| ())
 }
 
 /// This crate's version.

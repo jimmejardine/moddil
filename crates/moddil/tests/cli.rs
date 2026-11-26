@@ -531,6 +531,92 @@ fn seeds_reorder_tasks_and_a_failure_names_its_seed() {
     }
 }
 
+/// A set's values in the order it iterates them, as digits.
+const HASH_ORDER: &str = "use core::collections::HashSet;
+
+test \"order\" {
+    let s: HashSet<int> = [1, 2, 3, 4, 5, 6, 7, 8];
+    let mut out = 0;
+    for x in &s {
+        out = out * 10 + *x;
+    }
+    out  // => 0
+}
+";
+
+/// What the test above found the order to be, and the hash seed `moddil test` printed.
+fn hash_order(args: &[&str], path: &PathBuf) -> (String, String) {
+    let out = moddil(args, path);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    let found = stderr
+        .split("found ")
+        .nth(1)
+        .and_then(|s| s.split_whitespace().next())
+        .unwrap_or_else(|| panic!("an order: {stderr}"))
+        .to_string();
+    let seed = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("hash seed "))
+        .and_then(|s| s.split_whitespace().next())
+        .unwrap_or_else(|| panic!("a hash seed: {stdout}"))
+        .to_string();
+    (found, seed)
+}
+
+#[test]
+fn a_test_run_prints_its_hash_seed_and_the_seed_fixes_map_order() {
+    let path = file("hash-order.moddil", HASH_ORDER);
+    let mut orders = Vec::new();
+    for runner in [&[][..], &["--interp"][..], &["--wasm"][..]] {
+        let fixed = |seed: &str| {
+            hash_order(
+                &[&["test", "--hash-seed", seed][..], runner].concat(),
+                &path,
+            )
+        };
+        let (a, seed) = fixed("5");
+        assert_eq!(seed, "5");
+        assert_eq!(fixed("5").0, a, "one seed, one order");
+        orders.push((a, fixed("9").0));
+        // A fresh seed each run, which repeats its order when given back.
+        let (order, seed) = hash_order(&[&["test"][..], runner].concat(), &path);
+        assert_eq!(fixed(&seed).0, order);
+    }
+    // Each seed gives every runtime the same order, and the two seeds different ones.
+    assert!(orders.iter().all(|o| *o == orders[0]), "{orders:?}");
+    assert_ne!(orders[0].0, orders[0].1);
+}
+
+/// A program whose map order comes from the deterministic runtime it installs.
+const SEEDED_ORDER: &str = "use core::collections::HashSet;
+
+fn main() -> int {
+    with Runtime = Runtime::seeded(7) {
+        let s: HashSet<int> = [1, 2, 3, 4, 5, 6, 7, 8];
+        let mut out = 0;
+        for x in &s {
+            out = out * 10 + *x;
+        }
+        out
+    }
+}
+";
+
+#[test]
+fn the_deterministic_runtimes_seed_is_its_hash_seed() {
+    let path = file("seeded-order.moddil", SEEDED_ORDER);
+    let run = |runner: &[&str]| {
+        let out = moddil(&[&["run"][..], runner].concat(), &path);
+        assert!(out.status.success(), "{out:?}");
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+    let order = run(&[]);
+    assert_eq!(order.len(), 8, "{order}");
+    assert_eq!(run(&[]), order);
+    assert_eq!(run(&["--interp"]), order);
+}
+
 #[test]
 fn the_parallel_runtime_runs_tasks_at_once_natively() {
     let out = moddil(

@@ -139,8 +139,18 @@ impl Machine<'_> {
             // The interpreter runs one task at a time: a parallel runtime's tasks run in one of
             // the orders they may (`task.runtime.1`).
             "parallel" => return self.deliver(ret, Ok(Value::Bool(false))),
+            "hash_seed" => {
+                let s = *self
+                    .hash_seed
+                    .get_or_insert_with(|| moddil_os::random() as u64 & !(1 << 63));
+                return self.deliver(ret, Ok(Value::Int(s as i64)));
+            }
             "install_runtime" => {
                 self.sched.set_seed(values[0].as_int() as u64);
+                // The deterministic runtime's seed is its hash seed too (`coll.hash.2`).
+                if values[1].as_int() == 0 {
+                    self.hash_seed = Some(values[0].as_int() as u64);
+                }
                 return self.deliver(ret, Ok(Value::Unit));
             }
             "executor_of_task" => {

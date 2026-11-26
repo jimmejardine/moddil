@@ -285,7 +285,7 @@ impl Implementation for Wasm {
         }
         let items = moddil_sema::item_tree(&db, program);
         let tests: Vec<u32> = (0..items.tests.len() as u32).collect();
-        let runs = match moddil_wasm::run_tests(&db, program, &tests) {
+        let runs = match moddil_wasm::run_tests(&db, program, &tests, 0) {
             Ok(r) => r,
             Err(why) => {
                 // `MODDIL_WASM_WHY=1` says what keeps each file from running as WASM.

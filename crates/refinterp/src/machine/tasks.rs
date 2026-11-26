@@ -113,6 +113,9 @@ pub(crate) struct Tasks {
     /// The seed's generator, which picks the next ready task (`task.runtime.1`); 0 for first
     /// in, first out.
     seed: u64,
+    /// The run's hash seed (`coll.hash.2`): 0, the key every implementation's conformance tests
+    /// see, unless the test installs the deterministic runtime, whose seed it is then.
+    hash_seed: u64,
     /// Each executor's priority (`task.executor.1`): they are numbered from 1.
     executors: Vec<i64>,
 }
@@ -149,6 +152,7 @@ impl Tasks {
             threads: Vec::new(),
             panicked: false,
             seed: 0,
+            hash_seed: 0,
             executors: Vec::new(),
         }
     }
@@ -464,11 +468,18 @@ impl Machine<'_> {
         Some(match (owner, name) {
             ("", "__task_id") => Ok(Value::Int(self.memory.task() as i64)),
             ("", "__parallel") => Ok(Value::Bool(false)),
+            ("", "__hash_seed") => Ok(Value::Int(self.with_tasks(|ts| ts.hash_seed) as i64)),
             ("", "__install_runtime") => {
-                let Value::Int(seed) = args[0] else {
-                    unreachable!("an int")
+                let (Value::Int(seed), Value::Int(workers)) = (&args[0], &args[1]) else {
+                    unreachable!("ints")
                 };
-                self.with_tasks(|ts| ts.seed = seed as u64);
+                let (seed, workers) = (*seed as u64, *workers);
+                self.with_tasks(|ts| {
+                    ts.seed = seed;
+                    if workers == 0 {
+                        ts.hash_seed = seed;
+                    }
+                });
                 Ok(Value::Unit)
             }
             ("", "__scope_open") => {

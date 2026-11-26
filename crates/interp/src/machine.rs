@@ -32,6 +32,8 @@ struct Machine<'a> {
     /// Whether the run's result is given as it is, its borrows not yet shown: for a const
     /// frozen when compiling (`comptime.static.1`).
     raw_result: bool,
+    /// The run's hash seed (`coll.hash.2`), or `None` until a hash draws one from the OS.
+    hash_seed: Option<u64>,
 }
 
 mod ffi;
@@ -54,10 +56,13 @@ pub(crate) fn run(
     fuel: Option<u64>,
     os: Option<Vec<String>>,
 ) -> Result<Value, Stop> {
-    run_seeded(db, program, item, args, observer, fuel, os, 0)
+    // A run of `main` draws its hash seed from the OS; a test's or a const's has 0.
+    let hash_seed = if os.is_some() { None } else { Some(0) };
+    run_seeded(db, program, item, args, observer, fuel, os, 0, hash_seed)
 }
 
-/// As [`run`], its tasks run in the order seed `seed` picks (`task.runtime.1`).
+/// As [`run`], its tasks run in the order seed `seed` picks (`task.runtime.1`), and its maps in
+/// the order hash seed `hash_seed` does (`coll.hash.2`): drawn from the OS if `None`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_seeded(
     db: &dyn Db,
@@ -68,6 +73,7 @@ pub(crate) fn run_seeded(
     fuel: Option<u64>,
     os: Option<Vec<String>>,
     seed: u64,
+    hash_seed: Option<u64>,
 ) -> Result<Value, Stop> {
     let items = moddil_sema::item_tree(db, program);
     let first = Frame::new(
@@ -93,6 +99,7 @@ pub(crate) fn run_seeded(
         },
         pending: std::collections::HashMap::new(),
         raw_result: false,
+        hash_seed,
     };
     m.run_to_end(observer)
 }
@@ -122,6 +129,7 @@ pub(crate) fn run_frozen(
         sched: Scheduler::new(),
         pending: std::collections::HashMap::new(),
         raw_result: true,
+        hash_seed: Some(0),
     };
     let v = m.run_to_end(&mut |_, _, _| {})?;
     Ok(crate::frozen::freeze(&m.stack, &v))

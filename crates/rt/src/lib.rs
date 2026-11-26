@@ -17,6 +17,7 @@
 //! What they record is kept per run, shared by its threads, until the host [`take`]s it.
 
 mod baton;
+mod hash;
 pub mod host;
 pub mod num;
 mod os;
@@ -28,6 +29,7 @@ mod turns;
 #[cfg(target_arch = "wasm32")]
 pub use baton::task;
 pub use baton::{DropFn, TaskFn};
+pub use hash::set_hash_seed;
 pub use run::{
     TaskSpec, begin_run, channel, clone_sender, detach, drop_receiver, drop_sender, end_run, host,
     join, join_now, keep_text, last_trapped, park, recv, recv_now, scope_open, scope_run, select,
@@ -436,6 +438,7 @@ pub fn symbols() -> Vec<(&'static str, *const u8)> {
         ),
         ("moddil_rt_executor_new", run::executor_new as *const u8),
         ("moddil_rt_parallel", run::parallel as *const u8),
+        ("moddil_rt_hash_seed", hash::hash_seed as *const u8),
         ("moddil_rt_park", park as *const u8),
         ("moddil_rt_safe_point", run::safe_point as *const u8),
         (

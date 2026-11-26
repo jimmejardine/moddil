@@ -90,6 +90,12 @@ pub extern "C" fn task(t: u32) {
     moddil_rt::task(t as usize);
 }
 
+/// Sets the run's hash seed (`coll.hash.2`), as `moddil test` chose it.
+#[unsafe(export_name = "moddil_wasm_hash_seed")]
+pub extern "C" fn hash_seed(seed: i64) {
+    moddil_rt::set_hash_seed(Some(seed as u64));
+}
+
 /// How many allocations are not yet freed.
 #[unsafe(export_name = "moddil_wasm_live")]
 pub extern "C" fn live() -> i64 {
