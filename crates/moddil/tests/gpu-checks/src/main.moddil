@@ -1,0 +1,74 @@
+// Run in a browser by `tests/web.rs`: `int` on the GPU is 64 bits, as on the CPU, and a check
+// that fails in a kernel on the GPU traps the program where the kernel's source makes it.
+
+use gpu::{Gpu, GpuRoot, Image, Rgba8, Tile};
+
+struct Wide {
+    big: int,
+}
+
+/// Arithmetic past 32 bits: `big` (2^40) times a small count, then divided back down.
+#[kernel]
+fn wide(p: &Wide, out: &mut Tile) {
+    let x = out.x;
+    out.each(|px, py| {
+        let v = (p.big * (x + px + 1) + py) / 68719476736;
+        let k = (v % 256).to::<f32>() ?! "a byte";
+        Rgba8::grey(k / 255.0)
+    });
+}
+
+/// Stripes, a tile of 16 x 4 at a time.
+#[kernel]
+fn stripes(p: &Wide, out: &mut core::gpu::Tile<Rgba8, 16, 4>) {
+    let (x, y) = (out.x, out.y);
+    out.each(|px, py| Rgba8::grey(if (y + py) % 2 == 0 { ((x + px) % 16).to::<f32>() ?! "small" / 16.0 } else { 1.0 }));
+}
+
+struct Over {
+    big: int,
+}
+
+/// `big` (2^62) times 2 or more: past `int`, so it traps.
+#[kernel]
+fn overflows(p: &Over, out: &mut Tile) {
+    let x = out.x;
+    out.each(|px, _| {
+        let v = p.big * (x + px + 2);
+        Rgba8::grey(if v > 0 { 1.0 } else { 0.0 })
+    });
+}
+
+fn main(gpu: GpuRoot) {
+    let mut on_gpu = Image::new(16, 8);
+    let mut on_cpu = Image::new(16, 8);
+    let p = Wide { big: 1099511627776 };
+    with Gpu = &gpu {
+        gpu::launch(wide, &p, &mut on_gpu);
+    }
+    with Gpu = gpu::simulator() {
+        gpu::launch(wide, &p, &mut on_cpu);
+    }
+    let (a, b) = (on_gpu.summary(), on_cpu.summary());
+    let same = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && on_gpu.pixel(15, 7) == on_cpu.pixel(15, 7);
+    let word = if same { "agree" } else { "differ" };
+    log.info(fmt"wide ints {word}: {a.0} {b.0}");
+    // A tile of 16 x 4, a workgroup of that size on the GPU.
+    let mut on_gpu = Image::new(20, 6);
+    let mut on_cpu = Image::new(20, 6);
+    with Gpu = &gpu {
+        gpu::launch(stripes, &p, &mut on_gpu);
+    }
+    with Gpu = gpu::simulator() {
+        gpu::launch(stripes, &p, &mut on_cpu);
+    }
+    let (a, b) = (on_gpu.summary(), on_cpu.summary());
+    let word = if a.0 == b.0 && on_gpu.pixel(18, 4) == on_cpu.pixel(18, 4) { "agree" } else { "differ" };
+    log.info(fmt"tiles of 16 x 4 {word}: {a.0} {b.0}");
+    // Last: a kernel whose product overflows `int` traps the program, at the product.
+    let mut image = Image::new(8, 8);
+    with Gpu = &gpu {
+        gpu::launch(overflows, &Over { big: 4611686018427387904 }, &mut image);
+    }
+    log.info(fmt"not reached");
+}

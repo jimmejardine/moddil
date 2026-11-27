@@ -1,0 +1,74 @@
+// covers: gpu.int.1, gpu.trap.1
+
+// The functions a kernel's `int` runs on (two `u32` words), checked against `int` itself.
+
+use core::gpu::{WideInt, wide, wide_add, wide_add_overflows, wide_and, wide_div, wide_div_overflows, wide_eq, wide_lt, wide_mul, wide_mul_overflows, wide_neg, wide_neg_overflows, wide_not, wide_or, wide_rem, wide_shift_overflows, wide_shl, wide_shl_overflows, wide_shr, wide_sub, wide_sub_overflows, wide_xor};
+
+fn of(x: int) -> WideInt {
+    wide(x.truncate::<u32>(), (x >> 32).truncate::<u32>())
+}
+
+fn back(w: WideInt) -> int {
+    let hi: int = w.hi.wrap::<i32>();
+    let lo: int = w.lo;
+    (hi << 32) | lo
+}
+
+const LEAST: int = -9223372036854775808;
+const MOST: int = 9223372036854775807;
+
+fn values() -> [int; 14] {
+    [0, 1, -1, 2, -7, 65535, 65536, 4294967295, 4294967296, -4294967296, 123456789012, -98765432101, MOST, LEAST]
+}
+
+test "a wide int's arithmetic is int's" {
+    let mut ok = true;
+    for a in values() {
+        ok = ok && back(of(a)) == a && back(wide_neg(of(a))) == 0 -% a;
+        ok = ok && back(wide_not(of(a))) == !a;
+        for b in values() {
+            let (x, y) = (of(a), of(b));
+            ok = ok && back(wide_add(x, y)) == a +% b && back(wide_sub(x, y)) == a -% b;
+            ok = ok && back(wide_mul(x, y)) == a *% b;
+            ok = ok && back(wide_and(x, y)) == a & b && back(wide_or(x, y)) == a | b;
+            ok = ok && back(wide_xor(x, y)) == a ^ b;
+            ok = ok && wide_eq(x, y) == (a == b) && wide_lt(x, y) == (a < b);
+            ok = ok && wide_add_overflows(x, y) == a.checked_add(b).is_none();
+            ok = ok && wide_sub_overflows(x, y) == a.checked_sub(b).is_none();
+            ok = ok && wide_mul_overflows(x, y) == a.checked_mul(b).is_none();
+            if b != 0 && !wide_div_overflows(x, y) {
+                ok = ok && back(wide_div(x, y)) == a / b && back(wide_rem(x, y)) == a % b;
+            }
+        }
+    }
+    ok  // => true
+}
+
+test "a wide int's shifts and its edges" {
+    let mut ok = true;
+    for a in values() {
+        let mut n = 0;
+        while n < 64 {
+            let k: u32 = n.truncate::<u32>();
+            ok = ok && back(wide_shr(of(a), k)) == a >> n;
+            // `<<` traps if it loses a bit: exactly when the wide shift says it overflows.
+            let exact: i128 = a;
+            let by: i128 = n;
+            let fits = (exact << by).checked_to::<int>().is_some();
+            ok = ok && wide_shl_overflows(of(a), of(n)) == !fits;
+            if fits {
+                ok = ok && back(wide_shl(of(a), k)) == a << n;
+            }
+            n += 1;
+        }
+    }
+    ok  // => true
+    ;
+    wide_div_overflows(of(LEAST), of(-1))  // => true
+    ;
+    wide_neg_overflows(of(LEAST))  // => true
+    ;
+    wide_shift_overflows(of(64))  // => true
+    ;
+    wide_shift_overflows(of(63))  // => false
+}

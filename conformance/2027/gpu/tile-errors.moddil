@@ -1,0 +1,12 @@
+// covers: gpu.tile.1
+
+// A kernel's tile is `core::gpu::Tile`, by its struct: one only named `Tile` is not.
+struct Tile {
+    x: int,
+    y: int,
+}
+
+#[kernel]  //~ E0221
+fn draws(p: &int, out: &mut Tile) {
+    out.x = *p;
+}

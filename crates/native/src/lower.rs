@@ -330,8 +330,8 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("os_close", &['w'], None),
     (
         "gpu_dispatch",
-        &['p', 'w', 'p', 'w', 'w', 'w', 'p', 'w', 'w'],
-        Some('b'),
+        &['p', 'w', 'p', 'w', 'w', 'w', 'w', 'w', 'p', 'w', 'w'],
+        Some('w'),
     ),
     ("gpu_frame", &['p'], None),
     ("gpu_show", &['p', 'w', 'w', 'w'], None),
@@ -2823,7 +2823,12 @@ impl<M: Module> Lower<'_, '_, '_, M> {
 
     /// Records a trap at `site` and returns the trapped status.
     fn trap(&mut self, class: TrapClass, range: TextRange) -> Result<(), String> {
-        let site = self.site(Site::Trap(class, self.file, range));
+        self.trap_in(class, self.file, range)
+    }
+
+    /// As [`Lower::trap`], at `range` of file `file`.
+    fn trap_in(&mut self, class: TrapClass, file: u32, range: TextRange) -> Result<(), String> {
+        let site = self.site(Site::Trap(class, file, range));
         // A broken precondition is the caller's, wherever it is checked.
         let rt = if self.tracked || class == TrapClass::Precondition {
             self.c.rt.trap_tracked
@@ -5856,6 +5861,12 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let layouts = &mut self.c.layouts;
                 let mut offsets = |t: &Ty| match &layouts.of(t).ok()?.shape {
                     Shape::Fields(fs) => Some(fs.iter().map(|(o, _)| u64::from(*o)).collect()),
+                    // An array's elements, one stride apart.
+                    Shape::Array { stride, len, .. } => Some(
+                        (0..u64::from(*len))
+                            .map(|i| i * u64::from(*stride))
+                            .collect(),
+                    ),
                     _ => None,
                 };
                 let text = moddil_gpu::wgsl(db, program, k, &mut offsets)?;
@@ -5879,15 +5890,67 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let (pp, pn) = self.text(&args[1])?;
                 let width = self.value(&args[2])?;
                 let height = self.value(&args[3])?;
-                let (op, on) = self.text(&args[4])?;
-                let mode = self.value(&args[5])?;
+                let tile_width = self.value(&args[4])?;
+                let tile_height = self.value(&args[5])?;
+                let (op, on) = self.text(&args[6])?;
+                let mode = self.value(&args[7])?;
                 let r = self
                     .task_call(
                         "gpu_dispatch",
-                        &[sp, sn, pp, pn, width, height, op, on, mode],
+                        &[
+                            sp,
+                            sn,
+                            pp,
+                            pn,
+                            width,
+                            height,
+                            tile_width,
+                            tile_height,
+                            op,
+                            on,
+                            mode,
+                        ],
                     )
-                    .expect("a flag");
+                    .expect("a code");
                 self.write(d, Val::Scalar(r))
+            }
+            // A kernel's trap, reported by the GPU as its site (`gpu.trap.1`): trapped here, at
+            // the check's own source.
+            "trap" => {
+                let (db, program) = (self.c.db, self.c.program);
+                let k = moddil_gpu::kernel_of(db, program, &targs[0])
+                    .ok_or("`gpu::trap` of other than a `#[kernel]` named as a value")?;
+                let layouts = &mut self.c.layouts;
+                let mut offsets = |t: &Ty| match &layouts.of(t).ok()?.shape {
+                    Shape::Fields(fs) => Some(fs.iter().map(|(o, _)| u64::from(*o)).collect()),
+                    Shape::Array { stride, len, .. } => Some(
+                        (0..u64::from(*len))
+                            .map(|i| i * u64::from(*stride))
+                            .collect(),
+                    ),
+                    _ => None,
+                };
+                let (_, sites) = moddil_gpu::wgsl_sites(db, program, k, &mut offsets)?;
+                let site = self.value(&args[1])?;
+                let here = (self.file, self.span);
+                for (i, (class, src, range)) in sites.iter().enumerate() {
+                    let hit = self.b.create_block();
+                    let next = self.b.create_block();
+                    let is = self.b.ins().icmp_imm_s(IntCC::Equal, site, i as i64);
+                    self.b.ins().brif(is, hit, &[], next, &[]);
+                    self.b.switch_to_block(hit);
+                    let (file, range) = match src {
+                        Src::File(f) => (*f, *range),
+                        _ => here,
+                    };
+                    self.trap_in(*class, file, range)?;
+                    self.b.switch_to_block(next);
+                }
+                self.trap(TrapClass::Unreachable, here.1)?;
+                // It does not return: what follows the call is never reached.
+                let after = self.b.create_block();
+                self.b.switch_to_block(after);
+                Ok(())
             }
             "show" => {
                 let (p, n) = self.text(&args[0])?;

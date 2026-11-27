@@ -12,6 +12,7 @@ publish.workspace = true
 [dependencies]
 moddil-sched.workspace = true
 moddil-mir.workspace = true
+moddil-gpu.workspace = true
 moddil-sema.workspace = true
 salsa.workspace = true
 moddil-syntax.workspace = true

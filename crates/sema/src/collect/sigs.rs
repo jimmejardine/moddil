@@ -112,7 +112,14 @@ impl Collector<'_> {
             },
         };
         if let Some(at) = attrs.kernel_at {
-            check_kernel(at, container, &params, &ret.ty, &effects, &mut ds);
+            // `core::gpu::Tile`, by its struct (`gpu.tile.1`): not anything named `Tile`.
+            let tile_adt = self
+                .tree
+                .adts
+                .iter()
+                .position(|a| a.name == "Tile" && a.src == Src::Prelude)
+                .map(|a| a as u32);
+            check_kernel(at, container, &params, &ret.ty, &effects, tile_adt, &mut ds);
         }
         if foreign || attrs.export {
             let sig = CSig {
@@ -854,17 +861,19 @@ struct CSig<'a> {
     effects: &'a Effects,
 }
 
-/// A kernel: a free function taking its parameters, `&P`, then its tile, `&mut Tile`, giving
-/// nothing and listing no effects (`gpu.kernel.1`).
+/// A kernel: a free function taking its parameters, `&P`, then its tile, `&mut Tile` (the
+/// struct `tile_adt`, `core::gpu::Tile`), giving nothing and listing no effects
+/// (`gpu.kernel.1`).
 fn check_kernel(
     at: TextRange,
     container: Container,
     params: &[ParamSig],
     ret: &Ty,
     effects: &Effects,
+    tile_adt: Option<u32>,
     ds: &mut Vec<Diagnostic>,
 ) {
-    let tile = |t: &Ty| matches!(t, Ty::Ref(true, inner) if matches!(&**inner, Ty::Adt(_, n, _) if &**n == "Tile"));
+    let tile = |t: &Ty| matches!(t, Ty::Ref(true, inner) if matches!(&**inner, Ty::Adt(a, _, _) if Some(*a) == tile_adt));
     let shape = matches!(container, Container::Free)
         && params.len() == 2
         && matches!(params[0].ty, Ty::Ref(false, _))
@@ -875,7 +884,7 @@ fn check_kernel(
             Code::E0221,
             at,
             "a `#[kernel]` is a free function `fn k(params: &P, out: &mut Tile)`, giving \
-             nothing",
+             nothing, its tile `core::gpu::Tile` (or the `gpu` mod's `Tile`)",
         ));
     } else if !effects.is_none() {
         ds.push(Diagnostic::error(

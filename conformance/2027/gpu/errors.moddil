@@ -1,9 +1,7 @@
 // covers: gpu.kernel.1, gpu.cap.1
 
-struct Tile {
-    x: int,
-    y: int,
-}
+// The tile a kernel draws: `core::gpu`'s, of 8 x 8 RGBA8 pixels.
+type Tile = core::gpu::Tile<core::gpu::Rgba8, 8, 8>;
 
 #[kernel]  //~ E0221
 fn one_parameter(p: &int) {}

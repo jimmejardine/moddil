@@ -270,10 +270,14 @@ it at run time.
 The first GPU path (slice M2e; reference `gpu.md`), built for
 [Mandelbulb flight](examples/mandelbulb.md). It is a small part of this design:
 - **Tile kernels only**, as `#[kernel] fn k(params: &P, out: &mut Tile)`, with the kernel effect
-  set checked (E0221). The tile is a fixed 8 x 8 of RGBA8 pixels (`mods/gpu`), not a generic tile.
+  set checked (E0221). Since P21 the tile is `core::gpu::Tile<P, W, H>`, known by its struct and
+  generic over its pixel (a `Pixel`) and its size, a workgroup of `W` x `H` threads; the `gpu`
+  mod's `Tile` is 8 x 8 RGBA8. It has no `zeros`, `store`, `row` or `col` yet.
 - **WGSL through naga** (the `moddil-gpu` crate): the kernel's MIR and its callees, specialised, are
-  built as naga IR, validated, and written as WGSL. `int` is 32 bits on the GPU, and a kernel's
-  traps are not checked there yet.
+  built as naga IR, validated, and written as WGSL. Since P21, `int` is 64 bits on the GPU too
+  (two words, each operation `core::gpu`'s Moddil function for it), and a kernel's checks are made
+  there: a failed one writes its site to a trap word the host reads back, and `launch` traps at
+  it, on the CPU. A trap does not yet name the tile it was in.
 - **One device kind, WebGPU in a browser**, reached through the `Gpu` effect (`GpuRoot`); the CPU
   simulator (`simulator()`) runs the same kernel tile by tile, and is what tests and native runs
   use. There are no device sets, roles, buffers or transfers yet.
@@ -289,6 +293,12 @@ The first GPU path (slice M2e; reference `gpu.md`), built for
   - `gpu::present` shows an image straight from the GPU, with no copy back, and `launch` reads
     one back.
   - WGSL's back ends inline every function, so Moddil does no inlining of its own.
+- **Since P21:**
+  - arrays in a kernel, its own and its parameters', and slices of them: a slice is its array,
+    where it starts and its length, and a function taking one is lowered for each array length it
+    is given;
+  - what a kernel holds that a GPU does not (a `Vec`, text) is E0221 when the program is checked,
+    not a failure to build.
 
 ## Errors
 

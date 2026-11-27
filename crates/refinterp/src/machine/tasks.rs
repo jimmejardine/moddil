@@ -1072,7 +1072,7 @@ impl Machine<'_> {
         match name {
             "source" => Value::Ref(self.memory.temp(Value::Str("".into())), false),
             "bytes" => Value::Ref(self.memory.temp(Value::Array(Vec::new())), false),
-            "dispatch" => Value::Bool(false),
+            "dispatch" => Value::Int(0),
             "frame" => {
                 if let Value::Ref(p, _) = &args[0] {
                     let words = (0..8).map(|i| Value::Int(i64::from(i == 7))).collect();

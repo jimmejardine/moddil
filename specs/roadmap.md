@@ -118,10 +118,17 @@ L)
   node is never dead), and a count of allocations to test the reuse with.
 
 **P21. GPU kernels** (`crates/gpu`, `mods/gpu`, `core::gpu`; L)
-- Arrays and slices in a kernel (closures, `dyn` and text later).
-- A kernel's traps (overflow, a failed `?!`) checked on the GPU; `int` 64 bits there, not 32.
-- `Tile` recognised by its type, not its name (E0221), and generic over its pixel and size.
-- `scope`'s `s.launch`, so `launch` need not wait for the GPU.
+- Closures kept in values, `dyn` and text in a kernel; a slice of the CPU's memory (a `Vec`
+  field of its parameters), crossing as a buffer of its own.
+- A GPU trap that names the instance (the tile) it was in: traps are sites with a fixed message,
+  so that needs a trap with a message made when it happens.
+- `scope`'s `s.launch`, so `launch` need not wait for the GPU. A decision first: it cannot be a
+  method today, as `Scope` is the prelude's (only it can give `Scope` methods) and a trait's
+  method lists only `fail` (E0604), while a launch needs `Gpu`, `spawn` and `suspend`; so either
+  effects on trait methods, or `Scope::launch` in the prelude over a `Gpu` moved into `core::gpu`.
+  Then a dispatch that does not block the program: started, with its completion an OS event the
+  scheduler delivers to the launching task (as a connection's arrivals are), and buffers of its
+  own for each launch in flight.
 
 **P22. C interop, the next steps** (`crates/ffi`, `crates/native`, `crates/interp`; L)
 - Variadic C functions, in each platform's convention.

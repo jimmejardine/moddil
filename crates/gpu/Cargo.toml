@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 moddil-sema.workspace = true
 moddil-mir.workspace = true
+moddil-syntax.workspace = true
 naga.workspace = true
 
 [lints]
