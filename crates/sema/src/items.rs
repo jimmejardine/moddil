@@ -274,6 +274,9 @@ pub struct FnSig {
     pub bounded: bool,
     /// Whether it is `#[tag]`: a tagged literal `name"…"` calls it (`comptime.tag.1`).
     pub tag: bool,
+    /// For a const holding a tagged literal with fields, the struct its `read` gives, which
+    /// `NAME::Fields` names (`comptime.tag.fields.3`).
+    pub tag_fields: Option<u32>,
     /// The control effects it lists (`with suspend, spawn`).
     pub control: Control,
     /// For each parameter with a default (`port: u16 = 443`): the hidden const that is its
@@ -402,6 +405,7 @@ impl FnSig {
             track_caller: false,
             bounded: false,
             tag: false,
+            tag_fields: None,
             control: 0,
             defaults: Vec::new(),
             opaque: Vec::new(),

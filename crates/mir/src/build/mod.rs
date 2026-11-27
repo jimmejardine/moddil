@@ -32,10 +32,32 @@ use scopes::{ScopeItem, Scopes};
 /// The MIR of `owner`, or `None` if its file has errors.
 #[salsa::tracked(returns(ref))]
 pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
-    let file = owner.program(db);
-    if moddil_sema::has_errors(db, file) {
+    if moddil_sema::has_errors(db, owner.program(db)) {
         return None;
     }
+    build(db, owner)
+}
+
+/// The MIR of `owner` if its own body has no errors, whatever the rest of its program has:
+/// for evaluating a tag of the mod its literal is in, whose other code may use the literal's
+/// fields before they are found (`comptime.tag.fields.2`).
+#[salsa::tracked(returns(ref))]
+pub fn mir_of_sound_body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
+    let file = owner.program(db);
+    let base = Owner::new(db, file, owner.item(db).owner());
+    let errors = moddil_sema::body(db, base)
+        .diagnostics
+        .iter()
+        .chain(&moddil_sema::infer(db, base).diagnostics)
+        .any(|d| d.severity == moddil_sema::Severity::Error);
+    if errors {
+        return None;
+    }
+    build(db, owner)
+}
+
+fn build<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
+    let file = owner.program(db);
     if let Item::Closure(_, _, expr) = owner.item(db) {
         return Some(closure_mir(db, owner, expr));
     }

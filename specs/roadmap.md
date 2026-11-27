@@ -25,15 +25,14 @@ Python teams and backend teams come before the browser
 ([`adoption.md`: First audiences](adoption.md#first-audiences)).
 
 **P4. Text** (prelude `text`, `crates/sema`; M)
-- A tagged literal's fields (`comptime.tag.fields.1`) of types other than `String` and
-  `Option<String>` (a `Match`, a number), named by the tag; and a way to name the struct `read`
-  gives, so a function can return one. The design: the tag gives each field's type
-  as type text (`"int"`, `"Option<Match>"`), each value parsed with `FromStr` (a `Match` built
-  in), and the struct is named through the const holding the literal
-  (`const DATE: Regex = re"…"; fn f() -> DATE::Fields`). It needs a prelude `FromStr`, and a
-  const typed as the literal's wrapper (today the wrapper is hidden).
-- Fields for a tag taking `&[&str]`, and for a tag of the literal's own mod (E1012 now): the
-  second needs the mod collected without the literals that use it first.
+- `FromStr` for `f32` and `f64`, correctly rounded, so a tagged literal's field may be a float
+  (`comptime.tag.fields.3`, `text.fromstr.1`); and integers outside `int`'s range (`u64`'s top
+  half, `i128`, `u128`), which are read through `int` today.
+- A literal's field of a type of the tag's mod that implements `FromStr`: the generated `read` is
+  in the literal's module, which reaches the tag's mod by whatever path its imports give, so the
+  type needs a name every module can use, as `core::text::Match` has.
+- Fields for a tag taking `&[&str]` of a block literal (`"""…"""`): the probe would split its
+  parts as the lowering does, after dedenting.
 
 **P5. Numbers** (`crates/sema`, `crates/native`, `crates/wasm`, `crates/rt`; L)
 - `usize` and `isize` 32 bits wide on wasm32 (`num.types.2` says a pointer's width; they are 64

@@ -109,6 +109,18 @@ indentation but has no escapes. A `fmt"""` block is a block in the same way, wit
 
 ## Formatting
 
+**text.fromstr.1** The prelude's trait `FromStr`, `fn from_str(s: &str) -> Option<Self>`, reads a
+value from its text, `None` if the text is not one: an integer type's from its decimal digits
+after an optional `-` or `+`, of a value in its type's range and in `int`'s; a `bool` from `true`
+or `false`; a `char` from one character; and a `String` from the text as it is. A tagged literal's
+typed fields are read with it (**comptime.tag.fields.3**). Floats are not read yet.
+
+**core.text.1** The `core` mod's `text` module ([source](core/text.moddil)) has `Match`, where
+something is in a text: its `start` and `end` bytes, given to `Match::new(start, end)`, with
+`len()`, `is_empty()`, and `text(t)`, the text it is in `t`. Its fields are private; it is
+`Copy`, `Eq` and `Debug` (`Match { start: 2, end: 5 }`). The `moddil/regex` mod's matches are
+these.
+
 **text.write.1** The prelude's trait `TextWrite` is where text is written:
 `fn write_str(&mut self, s: &str)` writes `s`, and `fn write_char(&mut self, c: char)` writes one
 character, through `write_str` unless the type gives its own. Writing to it cannot fail. `String`

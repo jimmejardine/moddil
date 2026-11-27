@@ -187,13 +187,20 @@ pub struct TagRequest {
     pub tag: String,
     /// The literal's text, as the tag is called with it.
     pub text: String,
+    /// For a tag taking `&[&str]`, the parts it is called with instead (`comptime.tag.2`).
+    pub parts: Option<Vec<String>>,
+    /// Whether the tag is of the literal's own mod: the program then holds the literal's other
+    /// code too, which may use the fields not yet found, so only errors in the tag's call
+    /// count.
+    pub own: bool,
 }
 
 /// What evaluating a tag for its fields gave.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TagAnswer {
-    /// The fields: each one's name, and whether every reading has it.
-    Fields(Vec<(String, bool)>),
+    /// The fields: each one's name, whether every reading has it, and its type's text
+    /// (`comptime.tag.fields.3`).
+    Fields(Vec<(String, bool, String)>),
     /// A `compile_error` (`comptime.error.1`): its message, and the bytes of the text it names.
     CompileError(String, i64, i64),
     /// Another failure (a trap, fuel run out, or the tag's program not compiling).

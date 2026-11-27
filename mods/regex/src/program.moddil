@@ -60,6 +60,8 @@ pub struct Regex {
     /// Capture slots: two for each group, the whole match being group 0.
     pub(mod) slots: int,
     pub(mod) names: Vec<(String, int)>,
+    /// For each named group, in `names`' order, its field's type (`(?<year:int>…)`).
+    pub(mod) types: Vec<String>,
     /// For each group, by number, whether every match has it.
     pub(mod) every: Vec<bool>,
 }
@@ -74,7 +76,7 @@ impl Regex {
         c.emit(Inst::Save(1));
         c.emit(Inst::Match);
         let every = every_match_has(&parsed);
-        Regex { prog: c.prog, slots: parsed.captures * 2, names: parsed.names, every }
+        Regex { prog: c.prog, slots: parsed.captures * 2, names: parsed.names, types: parsed.types, every }
     }
 
     /// Whether the pattern matches somewhere in `text`.
@@ -140,6 +142,24 @@ impl TagFields for Regex {
         for (_, k) in self.names.iter() {
             out.push(match found.get(*k) {
                 Some(m) => Some(m.text(text).to_string()),
+                None    => None,
+            });
+        }
+        Some(out)
+    }
+
+    fn field_types(&self) -> Vec<String> {
+        self.types.clone()
+    }
+
+    fn field_spans(&self, text: &str) -> Option<Vec<Option<(int, int)>>> {
+        let Some(found) = self.captures(text) else {
+            return None;
+        };
+        let mut out = Vec::new();
+        for (_, k) in self.names.iter() {
+            out.push(match found.get(*k) {
+                Some(m) => Some((m.start(), m.end())),
                 None    => None,
             });
         }

@@ -135,4 +135,18 @@ trait TagFields {
 
     // The fields read from `text`, in `field_names`' order, or `None` if it has none.
     fn field_values(&self, text: &str) -> Option<Vec<Option<String>>>;
+
+    // Each field's type, in `field_names`' order, as text (`comptime.tag.fields.3`): `"String"`,
+    // `"Match"` (where it is in the text read, a `core::text::Match`), or a type the prelude's
+    // `FromStr` reads (`"int"`, `"u8"`, `"bool"`, `"char"`). A field given none is a `String`.
+    fn field_types(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    // Where each field is in `text`, in `field_names`' order: its first byte and the byte after
+    // its last, or `None` where a reading has none; `None` if `text` has no fields. A literal
+    // with a `Match` field reads it from here.
+    fn field_spans(&self, text: &str) -> Option<Vec<Option<(int, int)>>> {
+        None
+    }
 }

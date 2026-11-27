@@ -1,0 +1,38 @@
+// The `core` mod's `text` module (`core.text.1`): `Match`, where something is in a text. A
+// tagged literal's field of that type is where its value was found (`comptime.tag.fields.3`), and
+// the `moddil/regex` mod's matches are these.
+
+// Where a match is in the text searched: byte offsets, its start and its end.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Match {
+    start: int,
+    end: int,
+}
+
+impl Match {
+    // The match from byte `start` to byte `end` of a text.
+    pub fn new(start: int, end: int) -> Match {
+        Match { start, end }
+    }
+
+    pub fn start(&self) -> int {
+        self.start
+    }
+
+    pub fn end(&self) -> int {
+        self.end
+    }
+
+    pub fn len(&self) -> int {
+        self.end - self.start
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.end == self.start
+    }
+
+    // The text matched, in `text`, the text searched.
+    pub fn text(&self, text: &str) -> String {
+        text.bytes_between(self.start, self.end).to_string()
+    }
+}

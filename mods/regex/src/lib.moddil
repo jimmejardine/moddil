@@ -13,7 +13,9 @@
 //!
 //! `re"…"` is a tagged literal (`comptime.tag.1`): its pattern compiled when compiling, as static
 //! data, and a bad pattern an error at its place in the literal. Its named groups are its fields
-//! (`comptime.tag.fields.1`): `re"(?<year>\d{4})".read(text)` gives a struct with a `year`.
+//! (`comptime.tag.fields.1`): `re"(?<year>\d{4})".read(text)` gives a struct with a `year`, a
+//! `String`, or of the type after a `:` in the group's name (`(?<year:int>…)`, an integer type,
+//! `bool`, `char`, or `Match`, where it is: `comptime.tag.fields.3`). A match is `core::text::Match`.
 
 pub use mod::matching::{Captures, Match};
 pub use mod::program::{Regex, RegexError};

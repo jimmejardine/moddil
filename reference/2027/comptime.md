@@ -73,15 +73,19 @@ types them, as for any call. So a hole is a value given to the tag's value, neve
 the literal: `sql"… WHERE id = {user}"` gives the query and `user` apart. A hole cannot hold a `"`,
 which would end the literal, except in a raw one (`sqlr#"… {name("x")}"#`).
 
-**comptime.tag.fields.1** A tagged literal whose tag takes a `&str` and gives a value that
-implements the prelude's `TagFields` has **fields**: one for each name its value's
-`field_names()` gives, a `String` if that name's flag says every reading has it, or else an
-`Option<String>`. The literal is then its value in a wrapper that dereferences to it, so its own
-methods are the value's, and that has `read(text: &str)`: an `Option` of a struct with those
+**comptime.tag.fields.1** A tagged literal whose tag gives a value that implements the
+prelude's `TagFields` has **fields**: one for each name its value's `field_names()` gives, a
+`String` (or the type the tag gives it, **comptime.tag.fields.3**) if that name's flag says
+every reading has it, or else an `Option` of one. A tag taking `&[&str]` gives them for a
+literal written on one line (**comptime.tag.2**). The literal is then its value in a wrapper that
+dereferences to it, so its own methods are the value's (a literal with holes is what its value's
+`bind` gives through it), and that has `read(text: &str)`: an `Option` of a struct with those
 fields, whose values are the value's `field_values(text)`, `None` if that is `None`. A field every
-reading has that a reading lacks traps. The wrapper and the struct are hidden types, which no code
-can name; the struct is `Clone` and `PartialEq` field by field, and `Debug` writes its fields
-with no type's name (`{ year: "2026", month: "11", day: None }`). The `moddil/regex` mod's `Regex` implements it, a field for each named group:
+reading has that a reading lacks traps. The wrapper and the struct are hidden types, named only
+through a const holding the literal (**comptime.tag.fields.3**); the struct is `Clone` and
+`PartialEq` field by field, and `Debug` writes its fields with no type's name
+(`{ year: "2026", month: "11", day: None }`). The `moddil/regex` mod's `Regex` implements it, a field for each named group, of the type its
+name gives after a `:` (`(?<year:int>…)`, **comptime.tag.fields.3**):
 
 ```rust
 let date = re"(?<year>\d{4})-(?<month>\d{2})(-(?<day>\d{2}))?";
@@ -92,11 +96,27 @@ d.day                      // => None
 
 **comptime.tag.fields.2** A literal's fields are known before its program's bodies are checked,
 so its tag's `field_names()` is called while the program is collected: on the literal's text, in
-a program of only the tag's mod and the mods it depends on. So a tag whose value implements
-`TagFields` must come from another mod than the literal (E1012); and the field names must be
-distinct names, as a struct's fields are (E1012). Evaluating it is compile-time code as any other:
-a `compile_error` in it is reported in the literal's text (**comptime.error.1**, E1010), and a
-trap, or running out of fuel, is E1004.
+a program of only the tag's mod and the mods it depends on, in which no literal has fields. So a
+tag of the literal's own mod runs in that mod as it is without them: what the tag calls must not
+use them, and the code that does is not checked there. The field names must be distinct names,
+as a struct's fields are (E1012). Evaluating it is compile-time code as any other: a
+`compile_error` in it is reported in the literal's text (**comptime.error.1**, E1010), and a
+trap, running out of fuel, or code it calls that does not compile, is E1004.
+
+**comptime.tag.fields.3** A tag's value gives each field's type with `field_types()`, a type's
+text for each name in order (a field given none is a `String`): `String`; `Match`, where the
+field is in the text read, a `core::text::Match` from the value's `field_spans(text)`; or an
+integer type, `bool` or `char`, the field's text read with the prelude's `FromStr`
+(**text.fromstr.1**), so that `read` gives `None` if a field's text is not one. Another type is
+an error (E1012). A const holding the literal as its value, `const DATE: Regex = re"…";`, is of
+the literal's wrapper around the type written, and `DATE::Fields` names the struct its `read`
+gives (E0102 for a const holding no such literal), so a function can take or give one:
+
+```rust
+const DATE: Regex = re"(?<year:int>\d{4})-(?<month:u8>\d{2})";
+fn parse(text: &str) -> Option<DATE::Fields> { DATE.read(text) }
+(parse("2026-11") ?! "a date").year + 1        // => 2027
+```
 
 **comptime.error.1** `compile_error(message, start, end)`, a prelude function, ends compile-time
 code with an error, reported when compiling with `message` (E1010): at bytes `start` to `end` of

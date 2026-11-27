@@ -74,25 +74,48 @@ impl Evaluator for TagEvaluator {
 impl TagEvaluator {
     fn evaluate(&self, request: &TagRequest) -> TagAnswer {
         let mut hasher = DefaultHasher::new();
-        (&request.files, &request.mods).hash(&mut hasher);
+        (&request.files, &request.mods, request.own).hash(&mut hasher);
         let key = hasher.finish();
         let mut programs = self.programs.lock().expect("programs");
         let probe = programs
             .entry(key)
             .or_insert_with(|| build(&request.files, &request.mods));
-        probe.file.set_text(&mut probe.db).to(probe_source(
+        let source = probe_source(
             &request.module,
             &request.tag,
             &request.text,
-        ));
-        let db = &probe.db;
-        if let Some(d) = moddil_mir::diagnostics(db, probe.program)
-            .iter()
-            .find(|d| d.severity == moddil_sema::Severity::Error)
+            request.parts.as_deref(),
+        );
+        // The probe is in a module of its own, or, for a tag of the literal's own mod, which may
+        // be private to its module, at the end of the tag's file: only the probe's errors count
+        // there, for the mod's other code may use the fields not yet found. A tag that does not
+        // compile fails when it runs.
+        let mut at = ((probe.program.files(&probe.db).len() - 1) as u32, 0);
+        if request.own
+            && let Some(i) = request
+                .files
+                .iter()
+                .position(|(_, _, m, module)| *m == 0 && *module == request.module)
         {
+            let text = format!(
+                "{}
+{source}",
+                request.files[i].1
+            );
+            let file = probe.program.files(&probe.db)[i].source;
+            file.set_text(&mut probe.db).to(text);
+            at = (i as u32, request.files[i].1.len() as u32);
+        } else {
+            probe.file.set_text(&mut probe.db).to(source);
+        }
+        let db = &probe.db;
+        let (last, offset) = at;
+        if let Some(d) = moddil_mir::diagnostics(db, probe.program).iter().find(|d| {
+            d.severity == moddil_sema::Severity::Error
+                && (!request.own || (d.file == last && d.range.start >= offset))
+        }) {
             return TagAnswer::Failed(format!("its mod does not compile here: {}", d.message));
         }
-        let last = (probe.program.files(db).len() - 1) as u32;
         let tree = moddil_sema::item_tree(db, probe.program);
         let Some(f) = tree
             .fns
@@ -101,15 +124,22 @@ impl TagEvaluator {
         else {
             return TagAnswer::Failed("the tag could not be called".to_string());
         };
-        let run = crate::machine::run(
-            db,
-            probe.program,
-            Item::Fn(f as u32),
-            &[],
-            &mut |_, _, _| {},
-            Some(FUEL),
-            None,
-        );
+        let go = || {
+            crate::machine::run(
+                db,
+                probe.program,
+                Item::Fn(f as u32),
+                &[],
+                &mut |_, _, _| {},
+                Some(FUEL),
+                None,
+            )
+        };
+        let run = if request.own {
+            crate::machine::with_sound_bodies(go)
+        } else {
+            go()
+        };
         match run {
             Err(Stop::Trap(t)) if t.at == Some(PROBE_AT) => {
                 TagAnswer::Fields(fields(&t.reason.unwrap_or_default()))
@@ -153,34 +183,53 @@ fn build(files: &[(String, String, u32, Vec<String>)], mods: &[ModInfo]) -> Prob
 
 /// The extra module: the tag in module `module` called on `text`, and its value's fields given
 /// back as a `compile_error`'s message, a line each: the name, then `!` if every reading has
-/// it, or `?`.
-fn probe_source(module: &[String], tag: &str, text: &str) -> String {
+/// it, or `?`, then its type's text, if the value gives one (`comptime.tag.fields.3`).
+fn probe_source(module: &[String], tag: &str, text: &str, parts: Option<&[String]>) -> String {
     let mut path = String::from("mod::");
     for m in module {
         path.push_str(m);
         path.push_str("::");
     }
     let mut hashes = String::from("#");
-    while text.contains(&format!("\"{hashes}")) {
+    while std::iter::once(text)
+        .chain(parts.unwrap_or_default().iter().map(String::as_str))
+        .any(|t| t.contains(&format!("\"{hashes}")))
+    {
         hashes.push('#');
     }
+    // The tag's argument: the text, or its parts (`comptime.tag.2`).
+    let arg = match parts {
+        Some(ps) => {
+            let ps: Vec<String> = ps
+                .iter()
+                .map(|p| format!("r{hashes}\"{p}\"{hashes}"))
+                .collect();
+            format!("&[{}]", ps.join(", "))
+        }
+        None => format!("r{hashes}\"{text}\"{hashes}"),
+    };
     format!(
-        "fn {PROBE}() {{\n    let value = {path}{tag}(r{hashes}\"{text}\"{hashes});\n    \
-         let mut out = String::new();\n    for (name, every) in value.field_names() {{\n        \
+        "fn {PROBE}() {{\n    let value = {path}{tag}({arg});\n    \
+         let mut out = String::new();\n    let types = value.field_types();\n    let mut i = 0;\n    \
+         for (name, every) in value.field_names() {{\n        \
          out.push_str(name.as_str());\n        out.push_str(if every {{ \"!\" }} else {{ \"?\" }});\n        \
+         if i < types.len() {{ out.push_str(types[i].as_str()); }}\n        i += 1;\n        \
          out.push_str(\"\\n\");\n    }}\n    compile_error(out.as_str(), {}, {})\n}}\n",
         PROBE_AT.0, PROBE_AT.1
     )
 }
 
-/// The fields a probe's message names.
-fn fields(message: &str) -> Vec<(String, bool)> {
+/// The fields a probe's message names: each one's name, whether every reading has it, and its
+/// type's text (`String` where it gives none).
+fn fields(message: &str) -> Vec<(String, bool, String)> {
     message
         .lines()
         .filter_map(|l| {
-            let every = l.ends_with('!');
-            let name = l.strip_suffix('!').or_else(|| l.strip_suffix('?'))?;
-            Some((name.to_string(), every))
+            let at = l.find(['!', '?'])?;
+            let every = l[at..].starts_with('!');
+            let ty = l[at + 1..].trim();
+            let ty = if ty.is_empty() { "String" } else { ty };
+            Some((l[..at].to_string(), every, ty.to_string()))
         })
         .collect()
 }

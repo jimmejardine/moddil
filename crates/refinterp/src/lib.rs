@@ -33,7 +33,7 @@ use value::Value;
 pub(crate) const PRELUDE: &str = moddil_sources::PRELUDE;
 
 /// The `core` mod's modules (`reference/2027/core/`): each one's name and source.
-pub(crate) const CORE_MODULES: [(&str, &str); 7] = moddil_sources::CORE_MODULES;
+pub(crate) const CORE_MODULES: [(&str, &str); 8] = moddil_sources::CORE_MODULES;
 
 /// Why a program traps.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

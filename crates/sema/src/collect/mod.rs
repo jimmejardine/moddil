@@ -38,7 +38,7 @@ use report::Reporter;
 pub(crate) const PRELUDE: &str = moddil_sources::PRELUDE_AND_CORE;
 
 /// The `core` mod's modules, in [`PRELUDE`]'s order: each one's name and source.
-pub(crate) const CORE_MODULES: [(&str, &str); 7] = moddil_sources::CORE_MODULES;
+pub(crate) const CORE_MODULES: [(&str, &str); 8] = moddil_sources::CORE_MODULES;
 
 /// Where the `core` mod's items start in [`PRELUDE`].
 pub(crate) const CORE_START: usize = moddil_sources::PRELUDE.len();
@@ -653,6 +653,17 @@ impl Collector<'_> {
                 continue;
             }
             self.impl_item(*src, node);
+        }
+        // A const holding a tagged literal with fields names the struct its `read` gives
+        // (`DATE::Fields`, `comptime.tag.fields.3`): known before a signature names it.
+        for (k, (src, module, node)) in nodes.fns.iter().enumerate() {
+            if let Some(range) = tags::const_literal(node)
+                && let Some(Def::Adt(a)) =
+                    self.tree.lookup(*module, &tags::fields_name(range), false)
+            {
+                let _ = src;
+                self.tree.fns[first_free + k].tag_fields = Some(a);
+            }
         }
         for (k, (src, module, node)) in nodes.fns.iter().enumerate() {
             self.enter(*src, *module);

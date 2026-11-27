@@ -874,6 +874,26 @@ pub(crate) fn path_type(
                 Ok((Def::Fn(f), n)) if n + 1 == segs.len() && last.name == "Args" => {
                     args_alias(f, last, range, scope, diags)
                 }
+                // `DATE::Fields`: what the tagged literal const `DATE` holds reads a text into
+                // (`comptime.tag.fields.3`).
+                Ok((Def::Fn(f), n)) if n + 1 == segs.len() && last.name == "Fields" => {
+                    no_args(last, diags);
+                    match tree.fns[f as usize].tag_fields {
+                        Some(a) => tree.adts[a as usize].ty_with(a, Vec::new()),
+                        None => {
+                            diags.push(Diagnostic::error(
+                                Code::E0102,
+                                range,
+                                format!(
+                                    "`{}` has no `Fields`: only a const holding a tagged literal \
+                                     with fields has",
+                                    tree.fns[f as usize].name
+                                ),
+                            ));
+                            Ty::Error
+                        }
+                    }
+                }
                 Ok((Def::Adt(a), n))
                     if n + 2 == segs.len()
                         && last.name == "Args"

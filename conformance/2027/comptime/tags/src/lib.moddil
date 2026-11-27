@@ -1,6 +1,6 @@
-// covers: comptime.tag.1, comptime.tag.fields.1
+// covers: comptime.tag.1, comptime.tag.fields.1, comptime.tag.fields.2, comptime.tag.fields.3, text.fromstr.1
 
-use regex::re;
+use regex::{Regex, re};
 
 /// A tag of this program's own: the text, counted when compiling.
 #[tag]
@@ -51,4 +51,116 @@ test "what a literal reads is cloned, compared and debugged as a struct of its f
     d == (date.read("2026-12") ?! "a date")  // => false
     ;
     fmt"{d:?}"  // => "{ year: \"2026\", month: \"11\", day: None }"
+}
+
+test "a field's type is the tag's to give: read with `FromStr`, or where it is" {
+    let date = re"(?<year:int>\d{4})-(?<month:u8>\d{2})(-(?<day:int>\d{2}))?";
+    let d = date.read("on 2026-11, say") ?! "a date";
+    d.year + 1  // => 2027
+    ;
+    d.month  // => 11
+    ;
+    d.day  // => None
+    ;
+    (date.read("2026-11-26") ?! "a date").day  // => Some(26)
+    ;
+    let word = re"(?<at:Match>[a-z]+)(?<n:int>\d+)?";
+    let w = word.read("  abc12") ?! "a word";
+    w.at  // => Match { start: 2, end: 5 }
+    ;
+    w.at.text("  abc12")  // => "abc"
+    ;
+    w.n  // => Some(12)
+}
+
+test "a field its type does not read makes `read` give `None`" {
+    let small = re"(?<n:u8>\d+)";
+    (small.read("255") ?! "a number").n  // => 255
+    ;
+    small.read("256")  // => None
+    ;
+    let flag = re"(?<on:bool>[a-z]+)";
+    (flag.read("true") ?! "a flag").on  // => true
+    ;
+    flag.read("yes")  // => None
+}
+
+// A const holding a literal names the struct its `read` gives.
+const DATE: Regex = re"(?<year:int>\d{4})-(?<month:int>\d{2})";
+
+fn parse_date(text: &str) -> Option<DATE::Fields> {
+    DATE.read(text)
+}
+
+fn next_year(d: DATE::Fields) -> int {
+    d.year + 1
+}
+
+test "the struct a const's literal reads into is named through the const" {
+    let d = parse_date("2026-11") ?! "a date";
+    next_year(d.clone())  // => 2027
+    ;
+    d.month  // => 11
+    ;
+    DATE.is_match("99-1")  // => false
+    ;
+    parse_date("x")  // => None
+}
+
+// A tag of this mod, taking its literal's parts, whose value has a field for each name between
+// commas.
+struct Keys {
+    names: Vec<String>,
+}
+
+impl TagFields for Keys {
+    fn field_names(&self) -> Vec<(String, bool)> {
+        let mut out = Vec::new();
+        for n in self.names.iter() {
+            out.push((n.clone(), true));
+        }
+        out
+    }
+
+    fn field_values(&self, text: &str) -> Option<Vec<Option<String>>> {
+        let values = commas(text);
+        if values.len() != self.names.len() {
+            return None;
+        }
+        let mut out = Vec::new();
+        for v in values.iter() {
+            out.push(Some(v.clone()));
+        }
+        Some(out)
+    }
+}
+
+// The texts between commas.
+const fn commas(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut i = 0;
+    while i <= text.len() {
+        if i == text.len() || text.byte_at(i) == 44 {
+            out.push(text.bytes_between(start, i).to_string());
+            start = i + 1;
+        }
+        i += 1;
+    }
+    out
+}
+
+#[tag]
+const fn keys(parts: &[&str]) -> Keys {
+    Keys { names: commas(parts[0]) }
+}
+
+test "a tag of the literal's own mod, taking its parts, gives it fields" {
+    let k = keys"width,height";
+    let r = k.read("3,4") ?! "two values";
+    r.width  // => "3"
+    ;
+    r.height  // => "4"
+    ;
+    k.read("5")  // => None
 }

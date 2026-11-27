@@ -130,7 +130,7 @@ and a code never changes meaning.
 | E1009 | A const that is not `Copy` used by value, a move of static data | [comptime.static.2](comptime.md) |
 | E1010 | An error compile-time code reported with `compile_error` | [comptime.error.1](comptime.md) |
 | E1011 | A tagged literal whose tag is not a `#[tag]` `const fn` in scope taking a `&str` or a `&[&str]` | [comptime.tag.1](comptime.md), [comptime.tag.2](comptime.md) |
-| E1012 | A tagged literal whose fields cannot be: its tag is in the literal's own mod, or the names are not distinct field names | [comptime.tag.fields.2](comptime.md) |
+| E1012 | A tagged literal whose fields cannot be: the names are not distinct field names, or a type is not one a field can have | [comptime.tag.fields.2](comptime.md) |
 | E1101 | A literal its refined type's predicate does not hold for | [refine.lit.1](refinements.md) |
 | E1102 | A contract that is not pure | [contract.2](contracts.md) |
 | E1103 | `old(e)` of a value that is not `Copy`, or with other than one value | [contract.old.1](contracts.md) |

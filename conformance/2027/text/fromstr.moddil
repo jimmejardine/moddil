@@ -1,0 +1,52 @@
+// covers: text.fromstr.1, core.text.1
+
+fn int_of(s: &str) -> Option<int> {
+    int::from_str(s)
+}
+
+fn byte_of(s: &str) -> Option<u8> {
+    u8::from_str(s)
+}
+
+test "an integer is read from its decimal digits, in its type's range" {
+    int_of("42")  // => Some(42)
+    ;
+    int_of("-7")  // => Some(-7)
+    ;
+    int_of("+3")  // => Some(3)
+    ;
+    int_of("-9223372036854775808")  // => Some(-9223372036854775808)
+    ;
+    int_of("9223372036854775808")  // => None
+    ;
+    int_of("4 2")  // => None
+    ;
+    int_of("")  // => None
+    ;
+    int_of("-")  // => None
+    ;
+    byte_of("255")  // => Some(255)
+    ;
+    byte_of("256")  // => None
+    ;
+    byte_of("-1")  // => None
+}
+
+test "a bool and a char are read from their text" {
+    bool::from_str("true")  // => Some(true)
+    ;
+    bool::from_str("yes")  // => None
+    ;
+    char::from_str("é")  // => Some('é')
+    ;
+    char::from_str("ab")  // => None
+}
+
+test "a `Match` is where something is in a text" {
+    let m = core::text::Match::new(2, 5);
+    m.text("a bcd e")  // => "bcd"
+    ;
+    m.len()  // => 3
+    ;
+    m  // => Match { start: 2, end: 5 }
+}

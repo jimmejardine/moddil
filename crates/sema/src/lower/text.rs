@@ -370,7 +370,13 @@ impl Lowerer<'_> {
         self.out.body.tagged.insert(block, text);
         // A literal with fields is its value in the wrapper that reads them
         // (`comptime.tag.fields.1`).
-        let (_, make) = crate::collect::wrapper_names(range);
+        self.with_fields(block, range, range)
+    }
+
+    /// `block`, the value of the tagged literal at `literal`, in the wrapper that reads its
+    /// fields, if it has any (`comptime.tag.fields.1`); the call is at `at`.
+    fn with_fields(&mut self, block: ExprId, literal: TextRange, at: TextRange) -> ExprId {
+        let (_, make) = crate::collect::wrapper_names(literal);
         if let Some(crate::Def::Fn(w)) =
             self.types
                 .tree
@@ -382,14 +388,14 @@ impl Lowerer<'_> {
                     func: w,
                     args: vec![Ty::Infer(Ty::HOLE)],
                 },
-                range,
+                at,
             );
             return self.alloc(
                 ExprKind::Call {
                     callee,
                     args: vec![block],
                 },
-                range,
+                at,
             );
         }
         block
@@ -480,6 +486,9 @@ impl Lowerer<'_> {
         );
         let block = self.alloc(ExprKind::ConstBlock(call), range);
         self.out.body.tagged.insert(block, text);
+        // A literal with fields is its value in the wrapper that reads them
+        // (`comptime.tag.fields.1`); with holes, `bind` is its value's, through it.
+        let block = self.with_fields(block, whole, range);
         if holes.is_empty() {
             return block;
         }

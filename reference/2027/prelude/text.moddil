@@ -1049,3 +1049,70 @@ impl TextWrite for Padded {
         }
     }
 }
+
+// A value read from its text (`text.fromstr.1`), as a tagged literal's typed field is
+// (`comptime.tag.fields.3`): `None` if the text is not one.
+trait FromStr {
+    fn from_str(s: &str) -> Option<Self>;
+}
+
+// An integer's decimal digits, after an optional `-` or `+`, of a value in its type's range and
+// in `int`'s.
+#[derive_for(int, i8, i16, i32, i128, u8, u16, u32, u64, u128, isize, usize)]
+const fn int_from_str(t: type) -> Impl<FromStr> {
+    impl FromStr for t {
+        fn from_str(s: &str) -> Option<t> {
+            let n = s.len();
+            let mut i = 0;
+            let negative = n > 0 && s.byte_at(0) == 45;
+            if n > 0 && (s.byte_at(0) == 45 || s.byte_at(0) == 43) {
+                i = 1;
+            }
+            if i == n {
+                return None;
+            }
+            // Gathered negated, so the least `int` is read too.
+            let mut v: int = 0;
+            while i < n {
+                let b = s.byte_at(i);
+                if b < 48 || b > 57 {
+                    return None;
+                }
+                let d = (b - 48).checked_to::<int>()?;
+                v = v
+                    .checked_mul(10)?
+                    .checked_sub(d)?;
+                i += 1;
+            }
+            if !negative {
+                v = 0.checked_sub(v)?;
+            }
+            v.checked_to::<t>()
+        }
+    }
+}
+
+// `true` or `false`.
+impl FromStr for bool {
+    fn from_str(s: &str) -> Option<bool> {
+        if s == "true" { Some(true) } else if s == "false" { Some(false) } else { None }
+    }
+}
+
+// One character.
+impl FromStr for char {
+    fn from_str(s: &str) -> Option<char> {
+        let mut cs = s.chars();
+        let Some(c) = cs.next() else {
+            return None;
+        };
+        if cs.next().is_some() { None } else { Some(c) }
+    }
+}
+
+// The text as it is.
+impl FromStr for String {
+    fn from_str(s: &str) -> Option<String> {
+        Some(s.to_string())
+    }
+}

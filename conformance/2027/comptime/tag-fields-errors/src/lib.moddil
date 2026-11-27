@@ -1,32 +1,13 @@
-// covers: comptime.tag.fields.2
+// covers: comptime.tag.fields.2, comptime.tag.fields.3
 
 use regex::re;
-
-struct Words {
-    n: int,
-}
-
-impl TagFields for Words {
-    fn field_names(&self) -> Vec<(String, bool)> {
-        Vec::new()
-    }
-
-    fn field_values(&self, text: &str) -> Option<Vec<Option<String>>> {
-        None
-    }
-}
-
-#[tag]
-const fn words(text: &str) -> Words {
-    Words { n: text.len() }
-}
-
-// The fields are found while this mod is collected, so its own tag cannot give them.
-fn own_tag() -> int {
-    words"a b".n  //~ E1012
-}
 
 // A field is named as a struct's field is: `type` is a keyword.
 fn keyword_group() -> bool {
     re"(?<type>a)".is_match("a")  //~ E1012
+}
+
+// A field's type is one the literal can read: `f64` is not yet.
+fn float_group() -> bool {
+    re"(?<x:f64>\d+)".is_match("1")  //~ E1012
 }

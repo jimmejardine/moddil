@@ -20,7 +20,7 @@ mod convert;
 mod ownership;
 mod pretty;
 
-pub use build::mir;
+pub use build::{mir, mir_of_sound_body};
 pub use ownership::{borrowck, diagnostics, has_errors};
 
 /// A local: `_0` is the return value, `_1` to `_n` the arguments, then named locals and

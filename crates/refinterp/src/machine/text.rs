@@ -231,7 +231,8 @@ impl Machine<'_> {
         let array = self.memory.temp(Value::Array(strings));
         let value = self.invoke(f, vec![Value::Ref(array, false)], HashMap::new(), range)?;
         if holes.is_empty() {
-            return Ok(value);
+            // With fields, if its value has them (`comptime.tag.fields.1`).
+            return self.with_fields(value, range);
         }
         let mut values = Vec::new();
         for (hole, start) in holes {

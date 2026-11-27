@@ -61,6 +61,9 @@ pub struct Parsed {
     pub root: int,
     pub captures: int,
     pub names: Vec<(String, int)>,
+    /// For each named group, in `names`' order, the type its name gives (`(?<year:int>…)`), or
+    /// `String`.
+    pub types: Vec<String>,
 }
 
 /// The parser: the pattern as characters, and where it is.
@@ -70,6 +73,7 @@ struct Parser {
     nodes: Vec<Node>,
     captures: int,
     names: Vec<(String, int)>,
+    types: Vec<String>,
 }
 
 pub const fn parse(pattern: &str) -> Parsed with fail(RegexError) {
@@ -77,13 +81,13 @@ pub const fn parse(pattern: &str) -> Parsed with fail(RegexError) {
     for c in pattern.chars() {
         chars.push(c);
     }
-    let mut p = Parser { chars, at: 0, nodes: Vec::new(), captures: 1, names: Vec::new() };
+    let mut p = Parser { chars, at: 0, nodes: Vec::new(), captures: 1, names: Vec::new(), types: Vec::new() };
     let root = p.alternation()?;
     if p.at < p.chars.len() {
         // Only a `)` stops an alternation early.
         fail(p.error("a `)` with no `(`"));
     }
-    Parsed { nodes: p.nodes, root, captures: p.captures, names: p.names }
+    Parsed { nodes: p.nodes, root, captures: p.captures, names: p.names, types: p.types }
 }
 
 impl Parser {
@@ -239,21 +243,34 @@ impl Parser {
                     None => {}
                 }
                 let mut name = String::new();
+                // A type after the name, `(?<year:int>…)`: the type of the literal's field.
+                let mut ty = String::new();
+                let mut typed = false;
                 while let Some(c) = self.peek() {
                     if c == '>' {
                         break;
                     }
-                    if !(c.is_alphabetic() || c.is_numeric() || c == '_') {
-                        fail(self.error("a group name of letters, digits and `_`"));
+                    if c == ':' && !typed {
+                        typed = true;
+                        self.at += 1;
+                        continue;
                     }
-                    name.push(c);
+                    if !(c.is_alphabetic() || c.is_numeric() || c == '_') {
+                        fail(self.error("a group name of letters, digits and `_`, and its type after `:`"));
+                    }
+                    if typed {
+                        ty.push(c);
+                    } else {
+                        name.push(c);
+                    }
                     self.at += 1;
                 }
-                if !self.eat('>') || name.is_empty() {
+                if !self.eat('>') || name.is_empty() || (typed && ty.is_empty()) {
                     fail(self.error("a group name in `<…>`"));
                 }
                 capture = self.captures;
                 self.names.push((name, capture));
+                self.types.push(if typed { ty } else { "String".to_string() });
                 self.captures += 1;
             } else if self.peek() == Some('=') || self.peek() == Some('!') {
                 fail(self.backtracking("lookahead"));

@@ -46,8 +46,29 @@ mod allocs;
 mod ffi;
 mod tasks;
 
+thread_local! {
+    /// Whether this thread runs bodies without errors of a program that has some
+    /// ([`with_sound_bodies`]).
+    static SOUND_BODIES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// `f`, run where the interpreter runs the bodies without errors of a program that has some: a
+/// tag of the mod its literal is in, whose other code may use its fields before they are found
+/// (`comptime.tag.fields.2`).
+pub(crate) fn with_sound_bodies<R>(f: impl FnOnce() -> R) -> R {
+    SOUND_BODIES.set(true);
+    let r = f();
+    SOUND_BODIES.set(false);
+    r
+}
+
 /// The MIR of a function, test or closure of a checked program.
 fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> &'db Body {
+    if SOUND_BODIES.get() {
+        return moddil_mir::mir_of_sound_body(db, owner)
+            .as_ref()
+            .expect("a tag's code without errors");
+    }
     mir(db, owner)
         .as_ref()
         .expect("the interpreter only runs files without errors")

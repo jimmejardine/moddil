@@ -5,35 +5,8 @@ use mod::program::{Inst, Regex};
 
 use mod::syntax::in_class;
 
-/// Where a match is in the text searched: byte offsets, its start and its end.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Match {
-    start: int,
-    end: int,
-}
-
-impl Match {
-    pub fn start(&self) -> int {
-        self.start
-    }
-
-    pub fn end(&self) -> int {
-        self.end
-    }
-
-    pub fn len(&self) -> int {
-        self.end - self.start
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.end == self.start
-    }
-
-    /// The text matched, in `text`, the text searched.
-    pub fn text(&self, text: &str) -> String {
-        text.bytes_between(self.start, self.end).to_string()
-    }
-}
+/// Where a match is in the text searched: `core::text::Match`.
+pub use core::text::Match;
 
 /// The groups of a match: each one's [`Match`], if it took part.
 #[derive(Clone, Debug)]
@@ -52,7 +25,7 @@ impl Captures {
         if start < 0 || end < 0 {
             return None;
         }
-        Some(Match { start, end })
+        Some(Match::new(start, end))
     }
 
     /// How many groups there are, the whole match counted.
@@ -97,7 +70,7 @@ pub(mod) fn is_match(re: &Regex, text: &str) -> bool {
 pub(mod) fn find(re: &Regex, text: &str) -> Option<Match> {
     let t = decode(text);
     match run(re, &t, 0) {
-        Some(caps) => Some(Match { start: t.offsets[caps[0]], end: t.offsets[caps[1]] }),
+        Some(caps) => Some(Match::new(t.offsets[caps[0]], t.offsets[caps[1]])),
         None       => None,
     }
 }
@@ -117,7 +90,7 @@ pub(mod) fn find_all(re: &Regex, text: &str) -> Vec<Match> {
         };
         let empty = caps[1] == caps[0];
         if !(empty && caps[0] == last_end) {
-            out.push(Match { start: t.offsets[caps[0]], end: t.offsets[caps[1]] });
+            out.push(Match::new(t.offsets[caps[0]], t.offsets[caps[1]]));
             last_end = caps[1];
         }
         start_at = if empty { caps[1] + 1 } else { caps[1] };

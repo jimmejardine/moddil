@@ -153,6 +153,7 @@ impl Collector<'_> {
             container,
             generics,
             self_kind,
+            tag_fields: None,
             params,
             ret: ret.ty,
             ret_range: ret.range,
@@ -389,10 +390,27 @@ impl Collector<'_> {
             trait_ctx,
             ..self.scope()
         };
-        let ret = match node.children().find_map(ast::Type::cast) {
+        let mut ret = match node.children().find_map(ast::Type::cast) {
             Some(t) => resolve_type(&t, &scope, &mut ds),
             None => Ty::Error,
         };
+        // A tagged literal with fields is its value in a wrapper (`comptime.tag.fields.1`): a
+        // const holding one is of the wrapper around the type written, and names the struct its
+        // `read` gives (`comptime.tag.fields.3`).
+        let mut tag_fields = None;
+        if let Some(range) = super::tags::const_literal(node)
+            && let Some(crate::items::Def::Adt(w)) =
+                self.tree
+                    .lookup(self.module, &super::wrapper_names(range).0, false)
+        {
+            ret = self.tree.adts[w as usize].ty_with(w, vec![ret]);
+            if let Some(crate::items::Def::Adt(a)) =
+                self.tree
+                    .lookup(self.module, &super::tags::fields_name(range), false)
+            {
+                tag_fields = Some(a);
+            }
+        }
         // Its value is static data, which holds no borrow but shared ones of static data: text,
         // or a const's value (`borrow.static.1`, `comptime.static.3`).
         let text = static_borrows(&self.tree, &ret);
@@ -420,6 +438,7 @@ impl Collector<'_> {
             const_item: true,
             container,
             generics: generics.clone(),
+            tag_fields,
             ..FnSig::free(name, src, self.module, vis)
         }
     }

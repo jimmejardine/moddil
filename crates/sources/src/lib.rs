@@ -41,6 +41,7 @@ macro_rules! core_modules {
             "os", "core/os.moddil" => "../../../reference/2027/core/os.moddil",
             "gpu", "core/gpu.moddil" => "../../../reference/2027/core/gpu.moddil",
             "ffi", "core/ffi.moddil" => "../../../reference/2027/core/ffi.moddil",
+            "text", "core/text.moddil" => "../../../reference/2027/core/text.moddil",
         )
     };
 }
@@ -83,11 +84,11 @@ pub const PRELUDE: &str = prelude_files!(joined);
 pub const PRELUDE_FILES: [(&str, &str); 16] = prelude_files!(paths_and_texts);
 
 /// The `core` mod's modules, in order: each one's name and source.
-pub const CORE_MODULES: [(&str, &str); 7] = core_modules!(names_and_texts);
+pub const CORE_MODULES: [(&str, &str); 8] = core_modules!(names_and_texts);
 
 /// The `core` mod's files, in [`CORE_MODULES`]' order: each one's path under `reference/2027/`
 /// (`core/ptr.moddil`), and its text.
-pub const CORE_FILES: [(&str, &str); 7] = core_modules!(core_paths_and_texts);
+pub const CORE_FILES: [(&str, &str); 8] = core_modules!(core_paths_and_texts);
 
 /// The prelude's source followed by the `core` mod's modules, in [`CORE_MODULES`]' order: the
 /// compiler's prelude text, in which the `core` items start at [`PRELUDE`]'s length.
