@@ -700,7 +700,8 @@ impl Lowerer<'_> {
         self.alloc(ExprKind::Deref(projected), range)
     }
 
-    /// `f.name` of reflected field `k`: its name, as text.
+    /// `f.name` of reflected field `k`: its name, as text; `f.type_name`, its type's
+    /// (`comptime.template.field.2`).
     pub(super) fn reflected_member(
         &mut self,
         k: FieldRef,
@@ -711,12 +712,35 @@ impl Lowerer<'_> {
             let (name, _) = self.field_of(k);
             return self.alloc(ExprKind::Str(name), range);
         }
+        if member == "type_name" {
+            let (_, ty) = self.field_of(k);
+            return self.alloc(ExprKind::Str(ty.to_string()), range);
+        }
         self.report(
             Code::E1007,
             range,
-            format!("a reflected field has `name`, `is_refined()` and `new(e)`, not `{member}`"),
+            format!(
+                "a reflected field has `name`, `type_name`, `is_pub()`, `is_refined()` and \
+                 `new(e)`, not `{member}`"
+            ),
         );
         self.missing(range)
+    }
+
+    /// Whether reflected field `k` is `pub` (`comptime.template.field.2`): one of an enum's
+    /// variants, or of a tuple, is as visible as its type, so it is.
+    fn field_is_pub(&self, k: FieldRef) -> bool {
+        let Some(adt) = self.template.and_then(|t| t.adt) else {
+            return true;
+        };
+        if self.items.adts[adt as usize].is_enum {
+            return true;
+        }
+        self.items
+            .variant(adt, k.variant)
+            .fields
+            .get(k.k as usize)
+            .is_some_and(|f| matches!(f.vis, crate::items::Vis::Pub))
     }
 
     /// `v.name` of reflected variant `k`: its name, as text (`comptime.template.variant.1`).
@@ -946,7 +970,11 @@ impl Lowerer<'_> {
                 } else {
                     let k = self.reflected(receiver.syntax())?;
                     let (_, ty) = self.field_of(k);
-                    (method == "is_refined").then_some(matches!(ty, Ty::Refined(..)))
+                    match method.as_str() {
+                        "is_refined" => Some(matches!(ty, Ty::Refined(..))),
+                        "is_pub" => Some(self.field_is_pub(k)),
+                        _ => None,
+                    }
                 }
             }
             _ => None,
@@ -955,15 +983,17 @@ impl Lowerer<'_> {
             self.report(
                 Code::E1007,
                 node.text_range(),
-                "`if const` decides by reflection: `f.is_refined()`, `f.name == \"…\"`, \
-                 `t.is_enum()`, `is_unit()` and `is_positional()` of `t` or a variant `v`, \
-                 `true` and `false`, with `!`, `&&` and `||`",
+                "`if const` decides by reflection: `f.is_refined()`, `f.is_pub()`, \
+                 `f.name == \"…\"`, `f.type_name == \"…\"`, `t.is_enum()`, `is_unit()` and \
+                 `is_positional()` of `t` or a variant `v`, `true` and `false`, with `!`, `&&` \
+                 and `||`",
             );
         }
         value
     }
 
-    /// `f.name == "x"` (or `!=`, either way round): whether the names are equal (or not).
+    /// `f.name == "x"` or `f.type_name == "int"` (or `!=`, either way round): whether the names
+    /// are equal (or not).
     fn compare_names(&mut self, node: &SyntaxNode, subs: &[ast::Expr], eq: bool) -> Option<bool> {
         let _ = node;
         let [a, b] = subs else {
@@ -983,6 +1013,9 @@ impl Lowerer<'_> {
                 let m = ast::member_name(x.syntax())?;
                 if m.text() == "name" {
                     return Some(this.field_of(k).0);
+                }
+                if m.text() == "type_name" {
+                    return Some(this.field_of(k).1.to_string());
                 }
             }
             None

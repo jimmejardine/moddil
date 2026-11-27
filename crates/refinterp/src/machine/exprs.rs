@@ -188,11 +188,15 @@ impl Machine<'_> {
                 };
                 Ok(Value::Str(name.into()))
             }
-            // `f.name`: a reflected field's name (`comptime.template.field.1`).
+            // `f.name`: a reflected field's name (`comptime.template.field.1`); `f.type_name`, its
+            // type as written (`comptime.template.field.2`).
             ast::Expr::Field(_) if self.reflected(e.sub_exprs()[0].syntax()).is_some() => {
                 let (key, v, i) = self
                     .reflected_of(e.sub_exprs()[0].syntax())
                     .expect("a reflected field");
+                if member_name(e.syntax()) == "type_name" {
+                    return Ok(Value::Str(self.field_type_text(&key, v, i).into()));
+                }
                 if key.is_empty() {
                     return Ok(Value::Str(i.to_string().into()));
                 }

@@ -1,0 +1,77 @@
+// covers: comptime.template.field.2, comptime.template.if.1
+
+/// Each field the template sees: its name, its type, and whether it is `pub`.
+#[derive_by(listed)]
+trait Listed {
+    fn listed() -> String;
+}
+
+const fn listed(t: type) -> Impl<Listed> {
+    impl Listed for t {
+        fn listed() -> String {
+            let mut out = String::new();
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    inline for f in fields(v) {
+                        out.push_str(f.name);
+                        out.push_str(": ");
+                        out.push_str(f.type_name);
+                        if const f.is_pub() {
+                            out.push_str(" pub");
+                        }
+                        out.push_str("; ");
+                    }
+                }
+            } else {
+                inline for f in fields(t) {
+                    out.push_str(f.name);
+                    out.push_str(": ");
+                    out.push_str(f.type_name);
+                    if const f.is_pub() {
+                        out.push_str(" pub");
+                    }
+                    if const f.type_name == "int" {
+                        out.push_str(" (an int)");
+                    }
+                    out.push_str("; ");
+                }
+            }
+            out
+        }
+    }
+}
+
+#[derive(Listed)]
+struct Account {
+    /// Who holds it.
+    pub owner: String,
+    pub(mod) balance: int,
+    pub history: Vec<int>,
+}
+
+impl Listed for bool {
+    fn listed() -> String {
+        String::new()
+    }
+}
+
+// A generic struct's field types are written with its parameters.
+#[derive(Listed)]
+struct Pair<T> {
+    pub first: T,
+    second: Option<T>,
+}
+
+#[derive(Listed)]
+enum Shape {
+    Circle { radius: f64 },
+    Empty,
+}
+
+test "a template sees each field's type as text, and whether it is pub" {
+    Account::listed()  // => "owner: String pub; balance: int (an int); history: Vec<int> pub; "
+    ;
+    Pair::<bool>::listed()  // => "first: T pub; second: Option<T>; "
+    ;
+    Shape::listed()  // => "radius: f64 pub; "
+}

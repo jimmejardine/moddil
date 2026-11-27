@@ -1,0 +1,115 @@
+// reflect's own tests: `Reflect` and `ReflectMut` derived with their templates, looked at from
+// another mod, which sees only `pub` fields.
+
+use reflect::{FieldInfo, Reflect, ReflectMut, TypeInfo, Value, Visit};
+
+#[derive(Reflect, ReflectMut)]
+struct Account {
+    pub owner: String,
+    pub balance: int,
+    pub open: bool,
+    pub rate: f64,
+    pub tags: Vec<String>,
+    secret: int,
+}
+
+#[derive(Reflect)]
+enum Shape {
+    Circle { radius: f64 },
+    Square { side: int, label: String },
+    Empty,
+}
+
+// Writes what it is given, a line each.
+struct Lines {
+    out: String,
+}
+
+impl Visit for Lines {
+    fn variant(&mut self, name: &str) {
+        self.out.push_str(&fmt"variant {name}; ");
+    }
+
+    fn integer(&mut self, name: &str, value: int) {
+        self.out.push_str(&fmt"{name} = {value}; ");
+    }
+
+    fn float(&mut self, name: &str, value: f64) {
+        self.out.push_str(&fmt"{name} = {value}; ");
+    }
+
+    fn flag(&mut self, name: &str, value: bool) {
+        self.out.push_str(&fmt"{name} = {value}; ");
+    }
+
+    fn text(&mut self, name: &str, value: &str) {
+        self.out.push_str(&fmt"{name} = {value:?}; ");
+    }
+
+    fn other(&mut self, name: &str, ty: &str) {
+        self.out.push_str(&fmt"{name}: {ty}; ");
+    }
+}
+
+fn account() -> Account {
+    Account { owner: "ada".to_string(), balance: 120, open: true, rate: 1.5, tags: Vec::new(), secret: 7 }
+}
+
+// Whether `s` is the text `t`.
+fn is(s: &String, t: &str) -> bool {
+    let a: &str = s;
+    a == t
+}
+
+fn seen<T: Reflect>(value: &T) -> String {
+    let mut lines = Lines { out: String::new() };
+    value.visit_fields(&mut lines);
+    lines.out
+}
+
+test "a struct's description holds its pub fields, not its private ones" {
+    let info = Account::type_info();
+    assert(is(&info.name, "Account"));
+    assert(info.fields.len() == 5);
+    assert(info.fields[0] == FieldInfo { name: "owner".to_string(), ty: "String".to_string() });
+    assert(is(&info.fields[4].ty, "Vec<String>"));
+    for f in info.fields.iter() {
+        assert(!is(&f.name, "secret"));
+    }
+    assert(info.variants.is_empty());
+}
+
+test "each pub field's value comes to the method of its kind" {
+    let s = seen(&account());
+    let shown: &str = &s;
+    assert(shown == "owner = \"ada\"; balance = 120; open = true; rate = 1.5; tags: Vec<String>; ");
+}
+
+test "an enum gives its variant, then that variant's fields" {
+    let info = Shape::type_info();
+    assert(is(&info.name, "Shape"));
+    assert(info.variants.len() == 3);
+    assert(is(&info.variants[1], "Square"));
+    let s = seen(&Shape::Square { side: 2, label: "sq".to_string() });
+    let shown: &str = &s;
+    assert(shown == "variant Square; side = 2; label = \"sq\"; ");
+    let e = seen(&Shape::Empty);
+    let empty: &str = &e;
+    assert(empty == "variant Empty; ");
+}
+
+test "ReflectMut sets a pub field by name, of its kind" {
+    let mut a = account();
+    assert(a.set("balance", Value::Integer(5)));
+    assert(a.balance == 5);
+    assert(a.set("owner", Value::Text("bob".to_string())));
+    assert(is(&a.owner, "bob"));
+    assert(a.set("open", Value::Flag(false)));
+    assert(!a.open);
+    // The wrong kind, a field it does not reflect, or none of that name: nothing changes.
+    assert(!a.set("balance", Value::Flag(true)));
+    assert(!a.set("secret", Value::Integer(1)));
+    assert(!a.set("nothing", Value::Integer(1)));
+    assert(a.balance == 5);
+    assert(a.secret == 7);
+}

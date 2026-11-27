@@ -513,8 +513,18 @@ not the dynamic metaprogramming the [non-goals](requirements.md#non-goals-draft)
 
 - **Visibility is respected:** a field is reflected only where it would be visible, so another mod
   sees only `pub` fields.
-- **Read-only by default.** `#[reflect(mut)]` on the type lets an editor write fields through it;
-  a type with invariants simply does not opt in.
+- **Read-only by default.** Deriving `ReflectMut` too lets an editor write fields through it; a
+  type with invariants simply does not opt in.
+
+**As built:** [`mods/reflect`](../mods/reflect/src/lib.moddil) has the two derives, each a
+template. `T::type_info()` gives a `TypeInfo`: the type's name, its `pub` fields' names and types
+as text (`Vec<String>`), or an enum's variants' names. `visit_fields(&mut dyn Visit)` gives each
+reflected field's value to the `Visit` method of its kind (`integer`, `float`, `flag`, `text`, or
+`other` by its type's name; an enum first gives its variant). `ReflectMut::set(name, Value)` sets
+a `pub` field of one of those kinds by name. A struct's private fields are left out everywhere,
+even in its own mod: one description serves every reader. An enum's variants' fields are as
+visible as the enum, so all are. The description is built when asked for, not yet kept as static
+data, and a nested reflected value is `other`, not visited.
 
 ## Fit with the reference examples
 

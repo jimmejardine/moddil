@@ -168,15 +168,24 @@ way, it is an error (E1007).
 - `f.name` is the field's name, as text;
 - `x.[f]` is the field of `x`, and `[f]: e` gives it in a struct literal;
 - `f.is_refined()` says whether the field's type is a refinement ([Refinements](refinements.md));
-- `f.new(e)` is that refinement's `X::new(e)`, for a refined field only.
+- `f.new(e)` is that refinement's `X::new(e)`, for a refined field only;
+- `f.type_name` and `f.is_pub()` (**comptime.template.field.2**).
+
+**comptime.template.field.2** `f.type_name` is the field's type as text, as the compiler writes
+it (`int`, `Vec<String>`); a generic type's are written with its parameters (`Option<T>`), as
+its impl is one for every argument. `f.is_pub()` says whether code outside the type's module may name the field: a struct's
+field marked `pub`; an enum's variants' fields and a tuple's elements are as visible as their
+type, so it holds for them. A derive that describes a type to other mods, as `moddil/reflect`'s
+`Reflect` does, keeps to those fields.
 
 **comptime.template.if.1** In a template, `if const c { a } else { b }` is `a` if `c` holds and `b`
 if not (`()` without `else`). Only the branch taken is part of the impl, so only it is checked. `c`
-is reflection: `f.is_refined()`, `f.name == "…"` or `!=`, `t.is_enum()` (whether the template is
-instantiated for an enum), `t.is_unit()` and `t.is_positional()` (whether a struct `t` has no
-fields, or positional ones), the same of a variant `v`, `v.is_default()` (whether `v` is marked
-`#[default]`), `v == w` or `!=` of two reflected variants, `true` and `false`, joined by `!`, `&&`
-and `||` (E1007). Outside a template, `if const` is not supported yet (I0001).
+is reflection: `f.is_refined()`, `f.is_pub()`, `f.name == "…"` or `f.type_name == "…"` (or
+`!=`), `t.is_enum()` (whether the template is instantiated for an enum), `t.is_unit()` and
+`t.is_positional()` (whether a struct `t` has no fields, or positional ones), the same of a
+variant `v`, `v.is_default()` (whether `v` is marked `#[default]`), `v == w` or `!=` of two
+reflected variants, `true` and `false`, joined by `!`, `&&` and `||` (E1007). Outside a template,
+`if const` is not supported yet (I0001).
 
 **comptime.template.variant.1** In a template instantiated for an enum, `inline for v in
 variants(t) { … }` is its block once for each of the enum's variants, in the order they are

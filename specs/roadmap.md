@@ -154,10 +154,14 @@ L)
   `#[repr(packed)]` struct, with overflow traps at the width, and a lint for an odd width outside
   a packed struct.
 
-**P33. Runtime type information** (`mods/reflect`, `crates/sema` derives; M)
-- `#[derive(Reflect)]` (`stdlib.md`: Runtime type information): a static `TypeInfo` and typed
-  field accessors; only fields visible where they are read; read-only unless the type has
-  `#[reflect(mut)]`.
+**P33. Runtime type information** (`mods/reflect`, `crates/sema` templates, `crates/refinterp`;
+M)
+- `TypeInfo` kept as static data, made once when compiling, not built at each `type_info()`: a
+  template's `const { }` holding what an `inline for` builds.
+- A field whose type derives `Reflect` visited as one (a `Visit` method given its fields), not as
+  `other`.
+- `f.type_name` of a field typed by an alias: the compiler writes the type it stands for, the
+  reference interpreter the alias as written.
 
 **P34. Traps unwind only in isolated scopes** (`crates/native`, `crates/wasm`, `crates/rt`; L)
 - Today every internal call returns a status that its caller checks and passes on

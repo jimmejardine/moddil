@@ -1,0 +1,176 @@
+//! Run-time type information, opted into (`stdlib.md`: Reflection): `#[derive(Reflect)]` gives a
+//! type a description, `TypeInfo`, of its name and its fields' names and types, and typed access
+//! to their values: `visit_fields` gives each to a `Visit`, by its kind. Both are written by a
+//! derive function here, a template (`comptime.md`: Generation), so nothing is kept for a type that
+//! does not derive it.
+//!
+//! A field is reflected only where any code may see it: another mod sees only a struct's `pub`
+//! fields, so only those are (`comptime.template.field.2`); an enum's variants' fields are as
+//! visible as the enum, so all are. Values are read, not written, unless the type derives
+//! `ReflectMut` too, which sets a `pub` field by name.
+
+/// A reflected type: its name, and its fields'.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypeInfo {
+    pub name: String,
+    /// A struct's `pub` fields, in declared order; for an enum, none.
+    pub fields: Vec<FieldInfo>,
+    /// An enum's variants' names, in declared order; for a struct, none.
+    pub variants: Vec<String>,
+}
+
+/// A reflected field: its name, and its type as the compiler writes it (`int`, `Vec<String>`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct FieldInfo {
+    pub name: String,
+    pub ty: String,
+}
+
+/// What is given a value's fields (`Reflect::visit_fields`): a method for each kind of field,
+/// each given the field's name and value. A field of another type comes to `other`, by its
+/// type's name; an enum's value first gives its variant's name to `variant`. Each does nothing
+/// unless written.
+pub trait Visit {
+    fn variant(&mut self, name: &str) {}
+
+    fn integer(&mut self, name: &str, value: int) {}
+
+    fn float(&mut self, name: &str, value: f64) {}
+
+    fn flag(&mut self, name: &str, value: bool) {}
+
+    fn text(&mut self, name: &str, value: &str) {}
+
+    fn other(&mut self, name: &str, ty: &str) {}
+}
+
+/// A type whose description and fields can be looked at when the program runs; derived.
+#[derive_by(reflect)]
+pub trait Reflect {
+    /// The type's description.
+    fn type_info() -> TypeInfo;
+
+    /// Gives each reflected field's value to `out`, by its kind, in declared order.
+    fn visit_fields(&self, out: &mut dyn Visit);
+}
+
+/// `Reflect`'s derive: the description from the type's name and its reflected fields, and each
+/// field given to the method of its kind.
+pub const fn reflect(t: type) -> Impl<Reflect> {
+    impl Reflect for t {
+        fn type_info() -> TypeInfo {
+            let mut fields = Vec::new();
+            let mut variants = Vec::new();
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    variants.push(v.name.to_string());
+                }
+            } else {
+                inline for f in fields(t) {
+                    if const f.is_pub() {
+                        fields.push(FieldInfo { name: f.name.to_string(), ty: f.type_name.to_string() });
+                    }
+                }
+            }
+            TypeInfo { name: t.name.to_string(), fields, variants }
+        }
+
+        fn visit_fields(&self, out: &mut dyn Visit) {
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        out.variant(v.name);
+                        inline for f in fields(v) {
+                            if const f.type_name == "int" {
+                                out.integer(f.name, self.[f]);
+                            } else if const f.type_name == "f64" {
+                                out.float(f.name, self.[f]);
+                            } else if const f.type_name == "bool" {
+                                out.flag(f.name, self.[f]);
+                            } else if const f.type_name == "String" {
+                                out.text(f.name, &self.[f]);
+                            } else {
+                                out.other(f.name, f.type_name);
+                            }
+                        }
+                    }
+                }
+            } else {
+                inline for f in fields(t) {
+                    if const f.is_pub() {
+                        if const f.type_name == "int" {
+                            out.integer(f.name, self.[f]);
+                        } else if const f.type_name == "f64" {
+                            out.float(f.name, self.[f]);
+                        } else if const f.type_name == "bool" {
+                            out.flag(f.name, self.[f]);
+                        } else if const f.type_name == "String" {
+                            out.text(f.name, &self.[f]);
+                        } else {
+                            out.other(f.name, f.type_name);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A value to set a field to (`ReflectMut::set`): one of each kind `Visit` reads.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Value {
+    Integer(int),
+    Float(f64),
+    Flag(bool),
+    Text(String),
+}
+
+/// A struct whose `pub` fields of the kinds `Visit` reads can be set by name; derived.
+#[derive_by(reflect_mut)]
+pub trait ReflectMut {
+    /// Sets the field `name` to `value`: false, changing nothing, if the struct has no such
+    /// reflected field, or it is not of `value`'s kind.
+    fn set(&mut self, name: &str, value: Value) -> bool;
+}
+
+/// `ReflectMut`'s derive: each `pub` field of an integer, float, flag or text type, set by name.
+/// An enum has none.
+pub const fn reflect_mut(t: type) -> Impl<ReflectMut> {
+    impl ReflectMut for t {
+        fn set(&mut self, name: &str, value: Value) -> bool {
+            if const t.is_enum() {
+                false
+            } else {
+                inline for f in fields(t) {
+                    if const f.is_pub() {
+                        if name == f.name {
+                            if const f.type_name == "int" {
+                                if let Value::Integer(v) = &value {
+                                    self.[f] = *v;
+                                    return true;
+                                }
+                            } else if const f.type_name == "f64" {
+                                if let Value::Float(v) = &value {
+                                    self.[f] = *v;
+                                    return true;
+                                }
+                            } else if const f.type_name == "bool" {
+                                if let Value::Flag(v) = &value {
+                                    self.[f] = *v;
+                                    return true;
+                                }
+                            } else if const f.type_name == "String" {
+                                if let Value::Text(v) = &value {
+                                    self.[f] = v.clone();
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }
+                    }
+                }
+                false
+            }
+        }
+    }
+}

@@ -241,6 +241,40 @@ impl Machine<'_> {
         }
     }
 
+    /// Field `i` of variant `v` of `key`'s type as written, its white space squeezed (a tuple's
+    /// element, of an empty key, has none written).
+    fn field_type_text(&self, key: &str, v: usize, i: usize) -> String {
+        self.program
+            .adts
+            .get(key)
+            .and_then(|a| a.variants.get(v))
+            .and_then(|x| x.types.get(i).cloned().flatten())
+            .map(|t| {
+                let text = t.syntax().text().to_string();
+                let words: Vec<&str> = text.split_whitespace().collect();
+                words.join(" ")
+            })
+            .unwrap_or_default()
+    }
+
+    /// Whether field `i` of variant `v` of `key`'s type is `pub` (`comptime.template.field.2`):
+    /// an enum's variants' fields, and a tuple's elements, are as visible as their type.
+    fn field_is_pub(&self, key: &str, v: usize, i: usize) -> bool {
+        let Some(adt) = self.program.adts.get(key) else {
+            return true;
+        };
+        if adt.is_enum {
+            return true;
+        }
+        adt.variants
+            .get(v)
+            .and_then(|x| x.types.get(i).cloned().flatten())
+            .and_then(|t| t.syntax().parent())
+            // `pub`, not `pub(mod)`, as `mod.vis.2` reads it.
+            .and_then(|field| field.child(K::VIS))
+            .is_some_and(|vis| vis.token(K::MOD_KW).is_none())
+    }
+
     fn field_index(&self, v: &Value, name: &str) -> usize {
         match v {
             Value::Tuple(_) => name.parse().expect("a tuple index"),

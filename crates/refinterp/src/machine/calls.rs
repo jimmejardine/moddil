@@ -1270,11 +1270,18 @@ impl Machine<'_> {
             };
             return Ok(Value::Bool(answer));
         }
-        // A reflected field's `is_refined()` and `new(e)` (`comptime.template.field.1`).
+        // A reflected field's `is_refined()` and `new(e)` (`comptime.template.field.1`), and
+        // `is_pub()` (`comptime.template.field.2`).
         if let Some((key, i)) = self.reflected(receiver.syntax()) {
             let refined = self.field_refinement(&key, i);
             return match name.as_str() {
                 "is_refined" => Ok(Value::Bool(refined.is_some())),
+                "is_pub" => {
+                    let (_, v, _) = self
+                        .reflected_of(receiver.syntax())
+                        .expect("a reflected field");
+                    Ok(Value::Bool(self.field_is_pub(&key, v, i)))
+                }
                 _ => {
                     let v = self.eval(&args[0])?;
                     let k = refined.expect("a checked refinement");

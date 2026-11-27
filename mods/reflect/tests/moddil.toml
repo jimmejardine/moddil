@@ -1,0 +1,6 @@
+[mod]
+name = "reflect_tests"
+edition = "2027"
+
+[dependencies]
+reflect = { path = ".." }

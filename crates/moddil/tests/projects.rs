@@ -131,6 +131,7 @@ projects! {
     net => "mods/net/tests",
     num => "mods/num/tests",
     rand => "mods/rand/tests",
+    reflect => "mods/reflect/tests",
     regex => "mods/regex/tests",
     runtime => "mods/runtime/tests",
     serde => "mods/serde/tests",
