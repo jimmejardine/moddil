@@ -67,8 +67,12 @@ beyond what [`accelerators.md`](../accelerators.md) already specifies.
    its position, so flight feels the same at every scale, and the camera slows to a stop instead of
    passing through the surface. This calls the same `distance` function on the CPU that the kernel
    calls on the GPU.
-4. **Adaptive quality:** when frames take longer than the budget, the core lowers the render scale,
-   and raises it again when there is room.
+4. **Adaptive quality:** the image is the window's size in device pixels, a pixel for each of the
+   screen's, never scaled. When frames take longer than the budget for a few frames in a row, the
+   core lowers the steps a ray may take (to no fewer than 96), and raises them again when there is
+   room. A ray hits the surface within half a pixel's footprint at its distance, so detail finer
+   than a pixel is not looked for, and the shading samples at the hit's scale, the same at every
+   zoom.
 5. **Share:** "copy link" writes the camera to the URL hash; opening the link restores the view.
 
 ## Moddil features this stresses
@@ -162,7 +166,7 @@ The first build (slice M2e), `examples/mandelbulb/web`:
     and normals take four samples;
   - frames are shown from the GPU with no copy back;
   - buffers and bind groups are made once;
-  - the resolution and the steps adapt to the frame time;
+  - the steps adapt to the frame time, the resolution being the screen's;
   - a corner of the page shows the fps, the image's size and the GPU's time.
 - **The program is a `main(gpu: GpuRoot, window: Window)` frame loop**: each animation frame gives
   the input (WASD, the mouse while dragging or with the pointer locked, the wheel) and the time

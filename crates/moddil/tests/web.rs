@@ -331,7 +331,7 @@ fn the_mandelbulb_flies_on_webgpu_in_a_browser() {
         .filter(|s| !s.is_empty())
         .map(|s| s.parse().expect("a number"))
         .collect();
-    let want = [183_982, 199_192, 232_097];
+    let want = [196_051, 210_991, 234_524];
     eprintln!("the GPU's sums: {nums:?} (the simulator's: {want:?})");
     for (got, want) in nums.iter().zip(want) {
         assert!(

@@ -219,7 +219,7 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
     if (screen.canvas) return screen.canvas;
     const c = document.createElement('canvas');
     c.id = 'screen';
-    c.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;z-index:-1;background:#000';
+    c.style.cssText = 'position:fixed;left:0;top:0;z-index:-1;background:#000';
     document.body.prepend(c);
     const o = document.createElement('div');
     o.id = 'stats';
@@ -246,12 +246,26 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
     screen.canvas = c;
     return c;
   };
-  // The window's size: the page's `?size=WxH`, or the window's in CSS pixels. The program
-  // draws a fraction of it, as fast frames allow.
+  // The window's size: the page's `?size=WxH`, or the window's in device pixels, so an image of
+  // that size is shown a pixel for each of the screen's (`fit`).
   const windowSize = () => {
     const m = /^(\d+)x(\d+)$/.exec(query.get('size') ?? '');
     if (m) return [Number(m[1]), Number(m[2])];
-    return [Math.max(8, innerWidth), Math.max(8, innerHeight)];
+    const r = devicePixelRatio || 1;
+    return [Math.max(8, Math.round(innerWidth * r)), Math.max(8, Math.round(innerHeight * r))];
+  };
+  // Sizes canvas `c` for a `width` x `height` image, shown with no scaling: its CSS size is the
+  // image's in device pixels.
+  const fit = (c, width, height) => {
+    if (c.width !== width || c.height !== height) {
+      c.width = width;
+      c.height = height;
+    }
+    const r = devicePixelRatio || 1;
+    const w = `${width / r}px`;
+    const h = `${height / r}px`;
+    if (c.style.width !== w) c.style.width = w;
+    if (c.style.height !== h) c.style.height = h;
   };
   const device = async () => {
     if (screen.device !== undefined) return screen.device;
@@ -294,7 +308,7 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
     return g;
   };
   // The pass that shows the pixel buffer: a triangle covering the canvas, each fragment the
-  // pixel under it (the canvas is the image's size; CSS stretches it to the window).
+  // pixel under it (the canvas is the image's size, shown a pixel for each of the screen's).
   const BLIT = `
 @group(0) @binding(0) var<storage, read> pixels: array<u32>;
 @group(0) @binding(1) var<storage, read> size: array<u32>;
@@ -314,10 +328,7 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
       screen.context = c.getContext('webgpu');
       screen.context.configure({ device: d, format: screen.format, alphaMode: 'opaque' });
     }
-    if (c.width !== width || c.height !== height) {
-      c.width = width;
-      c.height = height;
-    }
+    fit(c, width, height);
     if (!screen.blit) {
       const module = d.createShaderModule({ code: BLIT });
       screen.blit = d.createRenderPipeline({
@@ -439,10 +450,7 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
       return;
     }
     const c = canvas();
-    if (c.width !== width || c.height !== height) {
-      c.width = width;
-      c.height = height;
-    }
+    fit(c, width, height);
     const rgba = new Uint8ClampedArray(pixels.buffer, 0, width * height * 4);
     c.getContext('2d').putImageData(new ImageData(rgba, width, height), 0, 0);
   };

@@ -14,23 +14,35 @@ pub struct Ray {
 #[derive(Copy, Clone)]
 pub struct Quality {
     pub max_steps: int,
-    /// A ray this close to the surface has hit it.
+    /// A ray this close to the surface has hit it, however near the camera: the threshold's
+    /// floor.
     pub epsilon: f32,
+    /// The angle one pixel spans, in radians (`Camera::pixel`). A ray at distance `t` has hit
+    /// the surface within half a pixel's width there, `t · pixel / 2`: detail finer than a pixel
+    /// is not looked for, so it does not shimmer, and near the camera the threshold is fine.
+    pub pixel: f32,
     /// A ray this far from its origin has missed.
     pub max_distance: f32,
 }
 
 impl Quality {
+    /// For an image about 1000 pixels tall; a renderer sets `pixel` from its image's height.
     pub fn standard() -> Quality {
-        Quality { max_steps: 128, epsilon: 0.0005, max_distance: 8.0 }
+        Quality { max_steps: 128, epsilon: 0.00001, pixel: 0.001, max_distance: 8.0 }
+    }
+
+    /// How close a ray at distance `t` must come to the surface to hit it.
+    pub fn threshold(&self, t: f32) -> f32 {
+        self.epsilon.max(t * self.pixel * 0.5)
     }
 }
 
 /// Where a ray ended up, and how many steps it took to get there. A surface point carries its
-/// orbit traps (`Estimate`), which colour it.
+/// orbit traps (`Estimate`), which colour it, its distance `t` along the ray, and the threshold
+/// it hit within (`Quality::threshold`), the scale its shading samples at.
 #[derive(Copy, Clone)]
 pub enum Hit {
-    Surface { at: Vec3, steps: int, origin: f32, planes: Vec3 },
+    Surface { at: Vec3, steps: int, origin: f32, planes: Vec3, t: f32, eps: f32 },
     Miss { steps: int },
 }
 
@@ -40,16 +52,31 @@ pub fn march(ray: Ray, params: Params, quality: Quality) -> Hit {
     while steps < quality.max_steps {
         let p = ray.origin + ray.dir.scale(t);
         let e = estimate(p, params);
-        if e.distance < quality.epsilon {
-            return Hit::Surface { at: p, steps: steps, origin: e.origin, planes: e.planes };
+        let eps = quality.threshold(t);
+        if e.distance < eps {
+            return Hit::Surface { at: p, steps: steps, origin: e.origin, planes: e.planes, t, eps };
         }
         t += e.distance;
         if t > quality.max_distance {
-            break;
+            return Hit::Miss { steps: steps };
         }
         steps += 1;
     }
+    // Out of steps: a ray grazing the surface, within a few pixels of it, has hit it, rather
+    // than showing the sky through it.
+    let p = ray.origin + ray.dir.scale(t);
+    let e = estimate(p, params);
+    let eps = quality.threshold(t);
+    if e.distance < eps * 4.0 {
+        return Hit::Surface { at: p, steps: steps, origin: e.origin, planes: e.planes, t, eps };
+    }
     Hit::Miss { steps: steps }
+}
+
+/// The scale of the shading's samples at distance `t` from the camera: 1 from the start's
+/// distance on, smaller nearer, so the shading looks the same at every zoom.
+fn near(t: f32) -> f32 {
+    (t / 1.5).clamp(0.0001, 1.0)
 }
 
 /// Brightness in [0, 1]: diffuse light from `light` (length 1), darkened where the ray needed
@@ -57,8 +84,8 @@ pub fn march(ray: Ray, params: Params, quality: Quality) -> Hit {
 /// the page draws with [`colour`].
 pub fn shade(hit: Hit, params: Params, quality: Quality, light: Vec3) -> f32 {
     match hit {
-        Hit::Surface { at, steps, .. } => {
-            let n = normal(at, params, quality.epsilon);
+        Hit::Surface { at, steps, eps, .. } => {
+            let n = normal(at, params, eps);
             let diffuse = n
                 .dot(light)
                 .max(0.0);
@@ -87,16 +114,16 @@ pub fn sky(dir: Vec3, light: Vec3) -> Vec3 {
 }
 
 /// How open the surface at `p` (normal `n`) is to the sky, from 0 (a deep crevice) to 1: five
-/// samples of the distance field along the normal, each closer to the surface than its height
-/// above it darkening it a little.
-fn occlusion(p: Vec3, n: Vec3, params: Params) -> f32 {
+/// samples of the distance field along the normal, at heights of scale `s` (`near`), each
+/// closer to the surface than its height above it darkening it a little.
+fn occlusion(p: Vec3, n: Vec3, params: Params, s: f32) -> f32 {
     let mut occ: f32 = 0.0;
     let mut weight: f32 = 1.0;
     let mut i = 0;
     while i < 5 {
-        let h = 0.01 + 0.03 * float(i);
+        let h = (0.01 + 0.03 * float(i)) * s;
         let d = distance(p + n.scale(h), params);
-        occ += (h - d) * weight;
+        occ += (h - d) / s * weight;
         weight *= 0.85;
         i += 1;
     }
@@ -104,10 +131,11 @@ fn occlusion(p: Vec3, n: Vec3, params: Params) -> f32 {
 }
 
 /// How much of the light towards `light` reaches `p`, from 0 to 1, with soft edges: a short march
-/// towards the light, darkening by how closely the ray passes the surface (penumbra 16).
-fn shadow(p: Vec3, light: Vec3, params: Params) -> f32 {
+/// towards the light, its first steps of scale `s` (`near`), darkening by how closely the ray
+/// passes the surface (penumbra 16).
+fn shadow(p: Vec3, light: Vec3, params: Params, s: f32) -> f32 {
     let mut res: f32 = 1.0;
-    let mut t: f32 = 0.01;
+    let mut t: f32 = 0.01 * s;
     let mut i = 0;
     while i < 24 {
         let d = distance(p + light.scale(t), params);
@@ -115,7 +143,7 @@ fn shadow(p: Vec3, light: Vec3, params: Params) -> f32 {
         if res < 0.001 {
             return 0.0;
         }
-        t += d.clamp(0.005, 0.2);
+        t += d.clamp(0.005 * s, 0.2);
         if t > 2.5 {
             break;
         }
@@ -131,19 +159,19 @@ fn shadow(p: Vec3, light: Vec3, params: Params) -> f32 {
 pub fn colour(hit: Hit, ray: Ray, params: Params, quality: Quality, light: Vec3) -> Vec3 {
     let background = sky(ray.dir, light);
     let lit = match hit {
-        Hit::Surface { at, origin, planes, .. } => {
-            let n = normal(at, params, quality.epsilon);
+        Hit::Surface { at, origin, planes, t, eps, .. } => {
+            let n = normal(at, params, eps);
+            let s = near(t);
             let base = palette(origin * 1.6 + planes.y * 0.8).mix(Vec3::new(0.95, 0.80, 0.55), (1.0 - planes.x * 4.0).clamp(0.0, 1.0) * 0.35);
-            let ao = occlusion(at, n, params);
+            let ao = occlusion(at, n, params, s);
             let sun = n
                 .dot(light)
-                .max(0.0) * shadow(at + n.scale(quality.epsilon * 4.0), light, params);
+                .max(0.0) * shadow(at + n.scale(eps * 4.0), light, params, s);
             let fill = 0.5 + 0.5 * n.y;
             let graze = (1.0 + ray.dir.dot(n)).clamp(0.0, 1.0);
             let rim = graze * graze * graze;
             let light_in = Vec3::new(1.30, 1.10, 0.85).scale(sun * 1.8) + Vec3::new(0.35, 0.45, 0.65).scale(fill * ao * 0.9) + Vec3::new(0.60, 0.50, 0.70).scale(rim * ao * 0.8) + Vec3::new(0.05, 0.05, 0.06).scale(ao);
             let surface = base.times(light_in);
-            let t = (at - ray.origin).length();
             surface.mix(background, 1.0 - (-0.06 * t * t).exp())
         }
         Hit::Miss { .. } => background,

@@ -10,7 +10,8 @@ const HEIGHT: int = 24;
 fn main() -> int {
     let camera = Camera::start();
     let params = Params::classic();
-    let quality = Quality::standard();
+    let mut quality = Quality::standard();
+    quality.pixel = camera.pixel(HEIGHT);
     let light = Vec3::new(-0.5, 0.7, -0.5).normalized();
     let mut lit = 0;
     let mut y = 0;

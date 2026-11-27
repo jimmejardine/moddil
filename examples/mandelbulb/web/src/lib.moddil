@@ -10,7 +10,7 @@ use mandelbulb::{Camera, Input, Params, Quality, Vec3, colour, fly, march};
 use gpu::{Gpu, Image, Rgba8, Tile};
 
 /// Everything the kernel reads: one frame's camera, fractal and quality, and the image's size,
-/// which is the window's times `scale`.
+/// which is the window's, a pixel of the image for each of the screen's.
 #[derive(Clone)]
 pub struct Scene {
     pub camera: Camera,
@@ -19,15 +19,20 @@ pub struct Scene {
     pub light: Vec3,
     pub width: int,
     pub height: int,
-    /// The image's size as a fraction of the window's, from 0.25 to 1: lowered when frames are
-    /// slow, raised again when they are fast.
-    pub scale: f32,
+    /// How many frames in a row have been slow (above 0) or fast (below 0).
+    pub pace: int,
 }
 
 impl Scene {
-    /// The scene the flight starts with, drawn `width` x `height`.
+    /// The scene the flight starts with, drawn `width` x `height` (its pixels' size set from
+    /// `height`, if it has one yet).
     pub fn start(width: int, height: int) -> Scene {
-        Scene { camera: Camera::start(), params: Params::classic(), quality: Quality::standard(), light: Vec3::new(-0.5, 0.7, -0.5).normalized(), width, height, scale: 1.0 }
+        let camera = Camera::start();
+        let mut quality = Quality::standard();
+        if height > 0 {
+            quality.pixel = camera.pixel(height);
+        }
+        Scene { camera, params: Params::classic(), quality, light: Vec3::new(-0.5, 0.7, -0.5).normalized(), width, height, pace: 0 }
     }
 }
 
@@ -48,37 +53,37 @@ pub fn render(scene: &Scene, out: &mut Tile) {
 /// A frame budget of 60 fps, with some room.
 const BUDGET: f32 = 0.018;
 
-/// `n` pixels as an `f32`, and back, rounded down.
-fn float(n: int) -> f32 {
-    n.to::<f32>() ?! "a window is far narrower than 2^24 pixels"
-}
+/// The fewest and most steps a ray may take: fewer would show the sky through grazing rays.
+const MIN_STEPS: int = 96;
+const MAX_STEPS: int = 160;
 
-fn whole(v: f32) -> int {
-    v.floor().to::<int>() ?! "a window's size, scaled down, is a whole number of pixels"
-}
+/// How many slow, or fast, frames in a row change the steps: a frame or two does not.
+const STREAK: int = 5;
 
 /// One frame's plan: moves the camera by `input` over `dt` seconds, and adapts to how long the
-/// frame took. A slow frame lowers the resolution first (down to a quarter of the window's), then
-/// the steps a ray may take; a fast one raises the steps first, then the resolution. The image is
-/// the `width` x `height` window's size times the scale. A first frame (`dt` 0) adapts nothing.
+/// frames take. The image is always the `width` x `height` window's size, a pixel for each of
+/// the screen's: only the steps a ray may take change, lowered after a streak of slow frames and
+/// raised after a streak of fast ones. A first frame (`dt` 0) adapts nothing.
 pub fn step(scene: Scene, input: Input, dt: f32, width: int, height: int) -> Scene {
     let mut next = scene;
     next.camera = fly(next.camera, input, next.params, dt);
     if dt > BUDGET {
-        if next.scale > 0.3 {
-            next.scale -= 0.05;
-        } else if next.quality.max_steps > 48 {
-            next.quality.max_steps -= 8;
-        }
+        next.pace = if next.pace > 0 { next.pace + 1 } else { 1 };
     } else if dt > 0.0 && dt < BUDGET * 0.6 {
-        if next.quality.max_steps < 160 {
-            next.quality.max_steps += 8;
-        } else if next.scale < 1.0 {
-            next.scale = (next.scale + 0.05).min(1.0);
-        }
+        next.pace = if next.pace < 0 { next.pace - 1 } else { -1 };
+    } else {
+        next.pace = 0;
     }
-    next.width = whole((float(width) * next.scale).max(8.0));
-    next.height = whole((float(height) * next.scale).max(8.0));
+    if next.pace >= STREAK && next.quality.max_steps > MIN_STEPS {
+        next.quality.max_steps -= 8;
+        next.pace = 0;
+    } else if next.pace <= -STREAK && next.quality.max_steps < MAX_STEPS {
+        next.quality.max_steps += 8;
+        next.pace = 0;
+    }
+    next.width = if width > 8 { width } else { 8 };
+    next.height = if height > 8 { height } else { 8 };
+    next.quality.pixel = next.camera.pixel(next.height);
     next
 }
 
@@ -104,7 +109,7 @@ test "the start, on the simulator" {
         let mut image = Image::new(48, 24);
         draw(&Scene::start(48, 24), &mut image);
         let (r, g, b) = image.summary();
-        assert(r == 183982 && g == 199192 && b == 232097);
+        assert(r == 196051 && g == 210991 && b == 234524);
     }
 }
 
@@ -118,22 +123,28 @@ test "the first frame of flight, on the simulator" {
         let mut image = Image::new(scene.width, scene.height);
         draw(&scene, &mut image);
         let (r, g, b) = image.summary();
-        assert(r == 183982 && g == 199192 && b == 232097);
+        assert(r == 196051 && g == 210991 && b == 234524);
     }
 }
 
-test "slow frames lower the resolution, then the steps; fast ones raise them again" {
+test "slow frames lower the steps, never the resolution; fast ones raise them again" {
     let mut scene = Scene::start(0, 0);
     let mut i = 0;
-    while i < 30 {
+    while i < 2 {
         scene = step(scene, still(), 0.05, 400, 200);
         i += 1;
     }
-    assert(scene.scale < 0.3 && scene.quality.max_steps < Quality::standard().max_steps);
-    assert(scene.width >= 8 && scene.width < 200);
+    // A frame or two changes nothing.
+    assert(scene.quality.max_steps == Quality::standard().max_steps);
     while i < 200 {
+        scene = step(scene, still(), 0.05, 400, 200);
+        i += 1;
+    }
+    assert(scene.quality.max_steps == MIN_STEPS);
+    assert(scene.width == 400 && scene.height == 200);
+    while i < 400 {
         scene = step(scene, still(), 0.005, 400, 200);
         i += 1;
     }
-    assert(scene.scale == 1.0 && scene.width == 400);
+    assert(scene.quality.max_steps == MAX_STEPS && scene.width == 400);
 }

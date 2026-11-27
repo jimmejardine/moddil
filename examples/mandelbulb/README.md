@@ -23,7 +23,7 @@ A page's `?size=WxH` fixes the image's size, and `?frames=N` stops after N frame
 ## Status
 
 Since slice S10, numbers ([`specs/roadmap.md`](../../specs/roadmap.md#how-work-is-built)),
-the pure core in `src/` checks, its tests pass, and the CPU preview runs (it lights 302 pixels,
+the pure core in `src/` checks, its tests pass, and the CPU preview runs (it lights 386 pixels,
 the same on every platform); `python tools/ci.py examples` checks all three.
 
 Since slice M2e, `web/` flies in the browser: the kernel is lowered to WGSL and runs on WebGPU, a

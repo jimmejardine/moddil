@@ -222,16 +222,16 @@ def step_tour():
 
 
 def step_examples():
-    # The Mandelbulb's CPU preview (specs/examples/mandelbulb.md) lights the same 302 pixels on
+    # The Mandelbulb's CPU preview (specs/examples/mandelbulb.md) lights the same 386 pixels on
     # every platform (floats are IEEE 754, their functions from libm). Its tests run in the test
     # step (crates/moddil/tests/projects.rs).
     cmd = ["cargo", "run", "-q", "-p", "moddil", "--"]
     print("$", " ".join(cmd + ["run", "examples/mandelbulb"]), flush=True)
     out = subprocess.run(cmd + ["run", "examples/mandelbulb"], capture_output=True, text=True)
     lit = out.stdout.strip()
-    preview = out.returncode == 0 and lit == "302"
+    preview = out.returncode == 0 and lit == "386"
     if not preview:
-        print(f"the preview gave {lit!r} (exit {out.returncode}), not 302")
+        print(f"the preview gave {lit!r} (exit {out.returncode}), not 386")
         print(out.stderr)
     return preview
 

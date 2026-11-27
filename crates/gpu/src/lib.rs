@@ -1200,11 +1200,14 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             Some(mut s) => body.append(&mut s),
             None => body.extend(self.dispatcher(stmts, &exits)),
         }
-        // Never reached (each path returns), but a function giving a value ends with a return:
-        // its own load, as the others are out of scope here.
-        let ret_value = self.var_value(0);
-        body.append(&mut self.out);
-        body.push(S::Return { value: ret_value });
+        // A function giving a value ends with a return where its end can be reached: its own
+        // load, as the others are out of scope here. Where every path has returned already, one
+        // would be unreachable code, which a browser's WGSL compiler warns of.
+        if !ends(&body) {
+            let ret_value = self.var_value(0);
+            body.append(&mut self.out);
+            body.push(S::Return { value: ret_value });
+        }
         self.f.body = Block::from_vec(body);
         Ok(self.f)
     }
@@ -2504,4 +2507,34 @@ fn array_len(t: &Ty) -> Option<u32> {
         },
         _ => None,
     }
+}
+
+/// Whether control never runs past the end of `stmts`: its last statement returns or ends the
+/// invocation, is an `if` whose branches both do, a switch whose cases (with a default) all do,
+/// or a loop with no `break` of its own.
+fn ends(stmts: &[S]) -> bool {
+    match stmts.last() {
+        Some(S::Return { .. } | S::Kill) => true,
+        Some(S::Block(b)) => ends(b),
+        Some(S::If { accept, reject, .. }) => ends(accept) && ends(reject),
+        Some(S::Switch { cases, .. }) => {
+            cases.iter().any(|c| c.value == SwitchValue::Default)
+                && cases.iter().all(|c| c.fall_through || ends(&c.body))
+        }
+        Some(S::Loop {
+            body, continuing, ..
+        }) => !breaks(body) && !breaks(continuing),
+        _ => false,
+    }
+}
+
+/// Whether `stmts` holds a `break` of the loop it is in: not one inside a loop or switch of its
+/// own, which that one takes.
+fn breaks(stmts: &[S]) -> bool {
+    stmts.iter().any(|s| match s {
+        S::Break => true,
+        S::Block(b) => breaks(b),
+        S::If { accept, reject, .. } => breaks(accept) || breaks(reject),
+        _ => false,
+    })
 }

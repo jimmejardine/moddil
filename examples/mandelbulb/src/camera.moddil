@@ -32,7 +32,8 @@ pub struct Input {
 /// The pitch limit: just short of straight up or down, where yaw stops meaning anything.
 const MAX_PITCH: f32 = 1.5;
 
-/// Never get closer to the surface than this.
+/// Never get closer to the surface than this: ten times the hit threshold's floor
+/// (`Quality::standard`), so a ray from the camera never starts inside it.
 const MIN_DISTANCE: f32 = 0.0001;
 
 impl Camera {
@@ -50,6 +51,12 @@ impl Camera {
 
     pub fn up(&self) -> Vec3 {
         self.forward().cross(self.right())
+    }
+
+    /// The angle one pixel of an image `height` pixels tall spans, in radians: its footprint per
+    /// unit of distance (`Quality::pixel`).
+    pub fn pixel(&self, height: int) -> f32 {
+        2.0 * (self.fov * 0.5).tan() / float(height)
     }
 
     /// The ray through the centre of pixel (`x`, `y`) of a `width` × `height` image; y grows down.
