@@ -116,7 +116,13 @@ L)
   field of its parameters), crossing as a buffer of its own.
 - A GPU trap that names the instance (the tile) it was in: traps are sites with a fixed message,
   so that needs a trap with a message made when it happens.
-- `scope`'s `s.launch`, so `launch` need not wait for the GPU.
+- `scope`'s `s.launch`, so `launch` need not wait for the GPU. A decision first: it cannot be a
+  method today, as `Scope` is the prelude's (only it can give `Scope` methods) and a trait's
+  method lists only `fail` (E0604), while a launch needs `Gpu`, `spawn` and `suspend`; so either
+  effects on trait methods, or `Scope::launch` in the prelude over a `Gpu` moved into `core::gpu`.
+  Then a dispatch that does not block the program: started, with its completion an OS event the
+  scheduler delivers to the launching task (as a connection's arrivals are), and buffers of its
+  own for each launch in flight.
 
 **P22. C interop, the next steps** (`crates/ffi`, `crates/native`, `crates/interp`; L)
 - Variadic C functions, in each platform's convention.
