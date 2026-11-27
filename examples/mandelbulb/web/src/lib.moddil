@@ -6,7 +6,7 @@
 // `mandelbulb` mod, shared with the CPU preview and the tests. The kernel is ordinary Moddil,
 // lowered to WGSL for the GPU, and run tile by tile on the CPU simulator where there is none.
 
-use mandelbulb::{Camera, Input, Params, Quality, Vec3, colour, fly, march};
+use mandelbulb::{Camera, Input, Params, Quality, Vec3, colour, distance, fly, march};
 use gpu::{Gpu, Image, Rgba8, Tile};
 
 /// Everything the kernel reads: one frame's camera, fractal and quality, and the image's size,
@@ -60,13 +60,34 @@ const MAX_STEPS: int = 160;
 /// How many slow, or fast, frames in a row change the steps: a frame or two does not.
 const STREAK: int = 5;
 
+/// The fractal's iterations: the fewest, from the start's distance from the surface on; how many
+/// more for each tenfold closer; and the most, at the camera's closest (beyond which its
+/// estimator's derivative nears `f32`'s range).
+const BASE_ITERATIONS: int = 12;
+const PER_DECADE: f32 = 3.0;
+const MAX_ITERATIONS: int = 24;
+
+/// The iterations for a camera `d` from the surface: more detail as it comes closer, where the
+/// finer shape is larger than a pixel, and no more cost far away, where it is not.
+pub fn iterations_at(d: f32) -> int {
+    let closer = (0.0 - d.max(0.000001).log10()).max(0.0);
+    let more = (closer * PER_DECADE).floor().to::<int>() ?! "a few decades";
+    let n = BASE_ITERATIONS + more;
+    if n > MAX_ITERATIONS { MAX_ITERATIONS } else { n }
+}
+
 /// One frame's plan: moves the camera by `input` over `dt` seconds, and adapts to how long the
 /// frames take. The image is always the `width` x `height` window's size, a pixel for each of
 /// the screen's: only the steps a ray may take change, lowered after a streak of slow frames and
-/// raised after a streak of fast ones. A first frame (`dt` 0) adapts nothing.
+/// raised after a streak of fast ones. The fractal's iterations follow the camera's distance from
+/// the surface (`iterations_at`). A first frame (`dt` 0) adapts nothing else.
 pub fn step(scene: Scene, input: Input, dt: f32, width: int, height: int) -> Scene {
     let mut next = scene;
     next.camera = fly(next.camera, input, next.params, dt);
+    // The distance by the fewest iterations, so it does not depend on the last frame's.
+    let mut coarse = next.params;
+    coarse.iterations = BASE_ITERATIONS;
+    next.params.iterations = iterations_at(distance(next.camera.position, coarse));
     if dt > BUDGET {
         next.pace = if next.pace > 0 { next.pace + 1 } else { 1 };
     } else if dt > 0.0 && dt < BUDGET * 0.6 {
@@ -147,4 +168,13 @@ test "slow frames lower the steps, never the resolution; fast ones raise them ag
         i += 1;
     }
     assert(scene.quality.max_steps == MAX_STEPS && scene.width == 400);
+}
+
+test "the iterations grow as the camera comes closer to the surface" {
+    assert(iterations_at(1.2) == BASE_ITERATIONS);
+    assert(iterations_at(0.1) == BASE_ITERATIONS + 3);
+    assert(iterations_at(0.001) == BASE_ITERATIONS + 9);
+    assert(iterations_at(0.0001) == MAX_ITERATIONS);
+    let scene = step(Scene::start(0, 0), still(), 0.0, 48, 24);
+    assert(scene.params.iterations == BASE_ITERATIONS);
 }

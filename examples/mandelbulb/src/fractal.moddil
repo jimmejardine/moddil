@@ -52,7 +52,9 @@ pub fn estimate(p: Vec3, params: Params) -> Estimate {
     let mut origin: f32 = 1000.0;
     let mut planes = Vec3::new(1000.0, 1000.0, 1000.0);
     let mut i = 0;
-    while i < params.iterations {
+    // The derivative grows about eightfold an iteration: past `f32`'s range, the orbit counts as
+    // one that never escaped (as it would at fewer iterations).
+    while i < params.iterations && dr < 1.0e30 {
         r = z.length();
         if r > params.bailout {
             break;
@@ -90,7 +92,7 @@ pub fn estimate(p: Vec3, params: Params) -> Estimate {
         i += 1;
     }
     // An orbit that never escaped is inside.
-    let distance = if r <= params.bailout { 0.0 } else { 0.5 * r.ln() * r / dr };
+    let distance = if r <= params.bailout || dr >= 1.0e30 { 0.0 } else { 0.5 * r.ln() * r / dr };
     Estimate { distance, origin, planes }
 }
 
