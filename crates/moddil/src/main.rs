@@ -36,6 +36,15 @@ enum Command {
     },
     /// Writes a mod's API pages, one Markdown file per module, once it checks: each public
     /// item's declaration (its signature, effects, errors and contracts) and doc comment.
+    /// Prints what the compiler writes for a program's items (`toolchain.explain.1`): the impls
+    /// its derives expand to, the hidden items of its wrapped functions and tagged literals,
+    /// and each wrapped function's body as the wrapper call it is.
+    Explain {
+        /// A file, or a mod's directory (with a `moddil.toml`).
+        file: PathBuf,
+        /// Only what this item's attributes and literals expand to: `Point`, `Counter::bump`.
+        item: Option<String>,
+    },
     Doc {
         /// A file, or a mod's directory (with a `moddil.toml`).
         file: PathBuf,
@@ -177,6 +186,7 @@ fn main() -> ExitCode {
         Command::Lsp | Command::Fmt { .. } => unreachable!("handled above"),
         Command::Check { file }
         | Command::Doc { file, .. }
+        | Command::Explain { file, .. }
         | Command::Run { file, .. }
         | Command::Test { file, .. }
         | Command::Build { file, .. }
@@ -213,6 +223,9 @@ fn main() -> ExitCode {
     let name = path.display().to_string();
     if matches!(cli.command, Command::Check { .. }) {
         return ExitCode::SUCCESS;
+    }
+    if let Command::Explain { item, .. } = &cli.command {
+        return explain(&db, program, &files, item.as_deref());
     }
     if let Command::Doc { output, .. } = &cli.command {
         let base = if path.is_dir() {
@@ -402,7 +415,9 @@ fn main() -> ExitCode {
             };
             native_test(&db, program, &files, *index, options)
         }
-        Command::Lsp | Command::Fmt { .. } => unreachable!("handled above"),
+        Command::Lsp | Command::Fmt { .. } | Command::Explain { .. } => {
+            unreachable!("handled above")
+        }
     }
 }
 
@@ -1349,6 +1364,50 @@ fn config() -> Config {
     Config::default()
         .with_index_type(IndexType::Byte)
         .with_color(std::io::stderr().is_terminal())
+}
+
+/// `moddil explain`: each piece of the expansion of the program's files (or of `item`'s), under
+/// a comment saying what it comes from, in the formatter's layout.
+fn explain(
+    db: &dyn Db,
+    program: Program,
+    files: &[(String, String)],
+    item: Option<&str>,
+) -> ExitCode {
+    let pieces: Vec<moddil_sema::Explained> = moddil_sema::explain(db, program)
+        .into_iter()
+        .filter(|e| item.is_none_or(|i| e.item == i))
+        .collect();
+    if pieces.is_empty() {
+        match item {
+            Some(i) => eprintln!("moddil: nothing is written for `{i}`"),
+            None => eprintln!("moddil: nothing is written for this program's items"),
+        }
+        return ExitCode::FAILURE;
+    }
+    let mut last = None;
+    for e in &pieces {
+        let (name, text) = &files[e.file as usize];
+        // What it comes from, once for the pieces of each attribute or literal.
+        if last != Some((e.file, e.origin)) {
+            let line = moddil_syntax::line_col(text, e.origin.start).0 + 1;
+            let from = text
+                .get(e.origin.start as usize..e.origin.end as usize)
+                .unwrap_or_default();
+            let from: String = from.split_whitespace().collect::<Vec<_>>().join(" ");
+            println!("// {}: {from} ({name}:{line})", e.item);
+            last = Some((e.file, e.origin));
+        }
+        match moddil_fmt::format(&e.text) {
+            Ok(t) => print!("{t}"),
+            Err(_) => println!("{}", e.text),
+        }
+        if let Some(t) = &e.template {
+            println!("// its members: the template of `{t}` (`#[derive_by({t})]`), for this type");
+        }
+        println!();
+    }
+    ExitCode::SUCCESS
 }
 
 fn report(name: &str, text: &str, d: &Diagnostic) {

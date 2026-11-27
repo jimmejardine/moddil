@@ -246,14 +246,18 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
     // Each `const { }` block computed when compiling (`comptime.block.2`): as a const's.
     for owner in moddil_sema::owners(db, program) {
         let base = owner.item(db);
-        if !items.freezes_blocks(base) {
+        let body = &moddil_sema::body(db, owner).body;
+        if !items.freezes_blocks(base) && body.wrapper_args.is_empty() {
             continue;
         }
-        let body = &moddil_sema::body(db, owner).body;
+        let types = moddil_sema::infer(db, owner);
         for (e, x) in body.exprs.iter() {
             let moddil_sema::hir::ExprKind::ConstBlock(_) = x.kind else {
                 continue;
             };
+            if !items.freezes_block(base, body, e, &types.expr(e)) {
+                continue;
+            }
             let index = e.into_raw().into_u32();
             let item = match base {
                 Item::Fn(i) => Item::Closure(i, false, index),

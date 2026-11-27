@@ -1,0 +1,110 @@
+// covers: attr.around.method.1, attr.around.args.1, attr.around.args.2
+
+// Describes the call: the function's path, its arguments, and what it returned.
+fn describe<A: Debug>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> String) -> String {
+    let shown = fmt"{args:?}";
+    let r = inner(args);
+    let p = f.path.clone();
+    fmt"{p} {shown} = {r}"
+}
+
+fn plain<A, R>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R {
+    inner(args)
+}
+
+// What `FnInfo` says of the parameters.
+fn params<A>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> String) -> String {
+    let mut out = String::new();
+    for p in f.params.iter() {
+        let n = p.name.clone();
+        let t = p.ty.clone();
+        out.push_str(&fmt"{n}: {t}; ");
+    }
+    out
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct Counter {
+    n: int,
+}
+
+impl Counter {
+    #[around(describe)]
+    fn show(&self, k: int) -> String {
+        let n = self.n + k;
+        fmt"{n}"
+    }
+
+    #[around(plain)]
+    fn bump(&mut self, by: int) -> int {
+        self.n += by;
+        self.n
+    }
+
+    #[around(plain)]
+    fn into_n(self) -> int {
+        self.n
+    }
+
+    #[around(params)]
+    fn listed(&self, k: int) -> String {
+        String::new()
+    }
+}
+
+#[around(plain)]
+fn add(a: int, b: int) -> int {
+    a + b
+}
+
+#[around(plain)]
+fn first<T: Clone>(xs: Vec<T>, i: int) -> T {
+    xs[i].clone()
+}
+
+// `f::Args` as a function's result type, made by name.
+fn made(a: int) -> add::Args {
+    add::Args { a, b: a + 1 }
+}
+
+// Matched by name.
+fn sum(x: add::Args) -> int {
+    let add::Args { a, b } = x;
+    a + b
+}
+
+test "a method is wrapped, `self` its arguments' field `this`" {
+    let mut c = Counter { n: 1 };
+    c.show(2)  // => "Counter::show Counter::show::Args { this: Counter { n: 1 }, k: 2 } = 3"
+    ;
+    c.bump(5)  // => 6
+    ;
+    c.n  // => 6
+    ;
+    c.listed(1)  // => "self: &Self; k: int; "
+    ;
+    c.into_n()  // => 6
+}
+
+test "`f::Args` is made and matched by name" {
+    let x = made(2);
+    x  // => add::Args { a: 2, b: 3 }
+    ;
+    sum(x)  // => 5
+    ;
+    let add::Args { a, b: _ } = made(7);
+    a  // => 7
+}
+
+test "a generic function's `f::Args` takes its type parameters" {
+    let g: first::Args<bool> = first::Args::<bool> { xs: [false, true], i: 1 };
+    let first::Args { xs, i } = g.clone();
+    xs.len() + i  // => 3
+    ;
+    g  // => first::Args { xs: [false, true], i: 1 }
+}
+
+test "a method's is `Type::method::Args`" {
+    let m: Counter::bump::Args = Counter::bump::Args { this: &mut Counter { n: 0 }, by: 4 };
+    m.by  // => 4
+}

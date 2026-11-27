@@ -654,7 +654,8 @@ fn fn_attrs(node: &SyntaxNode, src: Src, ds: &mut Vec<Diagnostic>) -> FnAttrs {
     a
 }
 
-/// A wrapped function is free, not `const`, and has plain parameters, for now.
+/// A wrapped function is free or a method of an inherent impl, not `const`, and has plain
+/// parameters, for now.
 fn wrapper_unsupported(
     node: &SyntaxNode,
     container: Container,
@@ -664,8 +665,16 @@ fn wrapper_unsupported(
     let Some(&at) = around.first() else {
         return;
     };
-    let what = if !matches!(container, Container::Free) {
-        Some("a wrapper on a method")
+    let inherent = match container {
+        Container::Free => true,
+        Container::Impl(_) => node
+            .parent()
+            .and_then(|b| b.parent())
+            .is_some_and(|i| crate::wrap::impl_self(&i).is_some()),
+        _ => false,
+    };
+    let what = if !inherent {
+        Some("a wrapper on a trait's method, or a trait impl's")
     } else if node
         .child_tokens()
         .take_while(|t| t.kind() != K::FN_KW)

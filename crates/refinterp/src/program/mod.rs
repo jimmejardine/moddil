@@ -741,13 +741,31 @@ impl Program {
                 // A function without `self` that shares a method's name is kept under
                 // `"name fn"`, which no name can be (`item.impl.same-name.1`).
                 let mut methods: HashMap<String, FnDef> = HashMap::new();
+                // An inherent impl's type, by name, for its wrapped methods
+                // (`attr.around.method.1`).
+                let owner = (!has_trait)
+                    .then(|| type_path(self_ty.syntax()).last().cloned())
+                    .flatten();
                 for f in item.child(K::IMPL_BODY).into_iter().flat_map(|b| {
                     b.children()
                         .filter_map(ast::FnItem::cast)
                         .collect::<Vec<_>>()
                 }) {
                     let name = f.name().expect("a name").text();
-                    let def = fn_def(&f, user, destructor, site);
+                    let mut def = fn_def(&f, user, destructor, site);
+                    if let (Some(file), Some(owner)) = (file, &owner) {
+                        let full = format!("{owner}::{name}");
+                        if let Some(mut w) = self.wrapping(&f, &full, file, module) {
+                            // Kept among the functions too, under a key no path names, for the
+                            // closure its wrapper is given.
+                            let key = Program::key(module, &format!("{full} wrapped"));
+                            w.key = key.clone();
+                            def.wrapping = Some(std::sync::Arc::new(w));
+                            let mut kept = fn_def(&f, user, destructor, site);
+                            kept.wrapping = def.wrapping.clone();
+                            self.fns.insert(key, kept);
+                        }
+                    }
                     let key = match methods.get(&name) {
                         Some(other) if other.self_kind.is_some() && def.self_kind.is_none() => {
                             format!("{name} fn")
@@ -830,32 +848,56 @@ impl Program {
         if wrappers.is_empty() {
             return None;
         }
-        let params: Vec<(String, String)> = f
+        // A method's `self`, the field `this` (`attr.around.method.1`).
+        let receiver = f
             .params()
-            .map(|l| l.params().collect::<Vec<_>>())
-            .unwrap_or_default()
-            .iter()
-            .map(|p| {
-                let name = p
-                    .pat()
-                    .map(|q| {
-                        q.syntax()
-                            .text()
-                            .to_string()
-                            .trim_start_matches("mut")
-                            .trim()
-                            .to_string()
-                    })
-                    .unwrap_or_default();
-                let ty = p
-                    .ty()
-                    .map(|t| t.syntax().text().to_string())
-                    .unwrap_or_default();
-                (name, ty.split_whitespace().collect::<Vec<_>>().join(" "))
-            })
+            .and_then(|l| l.syntax().child(K::SELF_PARAM))
+            .map(|s| {
+                let ty = match (s.token(K::AMP).is_some(), s.token(K::MUT_KW).is_some()) {
+                    (true, true) => "&mut Self",
+                    (true, false) => "&Self",
+                    (false, _) => "Self",
+                };
+                ("self".to_string(), ty.to_string())
+            });
+        let params: Vec<(String, String)> = receiver
+            .into_iter()
+            .chain(
+                f.params()
+                    .map(|l| l.params().collect::<Vec<_>>())
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|p| {
+                        let name = p
+                            .pat()
+                            .map(|q| {
+                                q.syntax()
+                                    .text()
+                                    .to_string()
+                                    .trim_start_matches("mut")
+                                    .trim()
+                                    .to_string()
+                            })
+                            .unwrap_or_default();
+                        let ty = p
+                            .ty()
+                            .map(|t| t.syntax().text().to_string())
+                            .unwrap_or_default();
+                        (name, ty.split_whitespace().collect::<Vec<_>>().join(" "))
+                    }),
+            )
             .collect();
         let args = Program::key(module, &format!("{name}::Args"));
-        let fields: Vec<String> = params.iter().map(|(n, _)| n.clone()).collect();
+        let fields: Vec<String> = params
+            .iter()
+            .map(|(n, _)| {
+                if n == "self" {
+                    "this".to_string()
+                } else {
+                    n.clone()
+                }
+            })
+            .collect();
         self.adts.insert(
             args.clone(),
             AdtInfo {
@@ -935,6 +977,19 @@ impl Program {
                 (k.clone(), &segments[1..])
             }
             _ => match self.resolve(module, segments)? {
+                // A wrapped function's arguments (`attr.around.args.2`): `f::Args`, or a
+                // method's `Type::method::Args`.
+                (Def::Item(k), n)
+                    if segments.last().is_some_and(|l| l == "Args")
+                        && n < segments.len()
+                        && self
+                            .adts
+                            .contains_key(&format!("{k}::{}", segments[n..].join("::"))) =>
+                {
+                    let key = format!("{k}::{}", segments[n..].join("::"));
+                    let adt = self.adts.get(&key)?;
+                    return Some((key, &adt.variants[0]));
+                }
                 (Def::Item(k), n) => (k, &segments[n..]),
                 (Def::Variant(k, v), n) if n == segments.len() => {
                     let adt = self.adts.get(&k)?;

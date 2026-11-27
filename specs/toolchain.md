@@ -43,6 +43,14 @@ and all of them are fast because the daemon is warm.
 Every command supports `--format json`, with stable diagnostic codes, so tools and agents never parse
 human-oriented text.
 
+**As built:** `moddil explain <file> [item]` prints, as source in the formatter's layout, what
+the compiler writes for the program's own items, or for one (`Point`, `Counter::bump`): the impls
+its derives expand to (one whose members a derive function's template gives says which
+function's), the hidden items of its wrapped functions and of its tagged literals with fields,
+and each wrapped function's body as the wrapper call it is. Each piece comes under a comment
+naming the attribute or literal it comes from and where. Desugarings, effect sets, error sets
+and handler stacks come later.
+
 ## Formatter
 
 - **Canonical.** Like `gofmt` and Black, the formatter has no style options. Source text is a print
@@ -95,7 +103,7 @@ human-oriented text.
 - **As built (M2f):** `moddil lsp` gives diagnostics, hover (types, signatures with effects,
   `suspend` and error sets), go to definition, inlay hints at suspension points, and completion
   (slice M2f). Units, capabilities and contracts on hover, the handler
-  stack, `explain` and the semantic diff come later.
+  stack, `explain` inline and the semantic diff come later.
 - An official **tree-sitter grammar** for syntax highlighting elsewhere (GitHub, other editors and
   tools).
 - Official editor integrations, in priority order: VS Code (most users; the playground's

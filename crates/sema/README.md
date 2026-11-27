@@ -26,7 +26,9 @@ context, `Buf`, `#[derive(Hash)]`, the built-in `core` mod, and borrows of stati
 const items, `const fn` and `const { }` with the rules of compile-time code, and the `Debug` and
 `Default` derives (S8a); refinements (`type X = T where p`, with `X::new`, refined literals and
 patterns) and contracts (`requires`, `ensures`, `old`) (S8b); function wrappers (`#[around(w)]`,
-expanded to a call of `w` with `&INFO`, `f::Args` and the body as a closure) (S8c); the control
+expanded to a call of `w` with `&INFO`, `f::Args` and the body as a closure, on free functions
+and inherent methods, its compile-time arguments frozen once) (S8c); `explain`, the expansion
+of a program's own items; the control
 effects `suspend` and `spawn`, and the prelude's `scope`, `spawn` and `join` (S9a); named and default arguments, `select`, and
 the prelude's channels, `Trapped` and stop (S9b); functions as values (as closures calling
 them), opaque `impl Trait` results, `test … for`, `main`'s root capabilities and `#[selectable]`

@@ -278,6 +278,17 @@ impl Builder<'_> {
                     range,
                 );
             }
+            // A wrapper's argument is static data whatever its type (`attr.around.args.1`): one
+            // neither `Copy` nor `Clone` is moved out of it, which the ownership check refuses
+            // (E1009).
+            ExprKind::ConstBlock(_)
+                if self.hir.wrapper_args.contains(&e) && self.frozen_block(e).is_some() =>
+            {
+                let p = self.place(e);
+                let ty = self.ty(e);
+                let op = self.use_place(p, &ty);
+                self.cfg.assign(dest, Rvalue::Use(op));
+            }
             ExprKind::ConstBlock(x) | ExprKind::Refine(x, _) => self.eval_into(dest, x),
             ExprKind::Fmt(pieces) => self.fmt(dest, &pieces, range),
             ExprKind::Array(_) | ExprKind::Repeat(..) | ExprKind::RepeatN(..)
@@ -1042,7 +1053,9 @@ impl Builder<'_> {
             Item::Test(i) => Item::Closure(i, true, super::idx(e) as u32),
             Item::Closure(..) => return None,
         };
-        self.items.freezes_blocks(self.base).then_some(item)
+        self.items
+            .freezes_block(self.base, self.hir, e, &self.ty(e))
+            .then_some(item)
     }
 
     /// The const item `e` names, if it is one frozen when compiling (`comptime.static.1`):

@@ -189,6 +189,15 @@ impl Lowerer<'_> {
                 let args = self.own_args(item);
                 Some(Resolved::TraitFn(t, func, trait_args, args))
             }
+            // `f::Args { … }` and `Type::method::Args { … }`: a wrapped function's arguments
+            // (`attr.around.args.2`).
+            (Def::Fn(f), [args]) if args.name == "Args" => self.args_ctor(f, args, range),
+            (Def::Adt(a), [method, args])
+                if args.name == "Args"
+                    && let Some(f) = crate::wrap::inherent_method(self.items, a, &method.name) =>
+            {
+                self.args_ctor(f, args, range)
+            }
             (Def::Module(_), []) => {
                 self.report(
                     Code::E0101,
@@ -218,6 +227,40 @@ impl Lowerer<'_> {
                 None
             }
         }
+    }
+
+    /// The constructor of wrapped function `f`'s `Args`, written as `seg` (`f::Args<T>` gives the
+    /// function's type arguments).
+    fn args_ctor(
+        &mut self,
+        f: u32,
+        seg: &crate::resolve::Segment,
+        range: TextRange,
+    ) -> Option<Resolved> {
+        let Some((adt, alias)) = crate::wrap::args_items(self.items, f) else {
+            let name = self.items.fns[f as usize].name.clone();
+            self.report(
+                Code::E0102,
+                range,
+                format!("`{name}` has no `Args`: only a wrapped function has (`#[around(…)]`)"),
+            );
+            return None;
+        };
+        let fields = self.items.adts[adt as usize].generics.params.len();
+        let args = match (&seg.args, alias) {
+            (Some(a), Some(t)) => {
+                let def = &self.items.types[t as usize];
+                let want = def.params.len();
+                let ty = def.ty.clone();
+                let given = self.type_args(a, want, "`Args`");
+                match ty.subst(&given) {
+                    Ty::Adt(_, _, args) => args.to_vec(),
+                    _ => vec![Ty::Infer(Ty::HOLE); fields],
+                }
+            }
+            _ => vec![Ty::Infer(Ty::HOLE); fields],
+        };
+        Some(Resolved::Ctor(adt, 0, args))
     }
 
     /// For `ty::item` where `ty` is not an item: `Self`, a type parameter or a built-in type

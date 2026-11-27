@@ -1,0 +1,19 @@
+// covers: attr.around.args.1
+
+struct Opaque {
+    n: int,
+}
+
+fn plain<A, R>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R {
+    inner(args)
+}
+
+fn taking<A, R>(o: Opaque, f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R {
+    inner(args)
+}
+
+// Neither `Copy` nor `Clone`: static data, which a call cannot own.
+#[around(taking(Opaque { n: 1 }))]  //~ E1009
+fn owned(x: int) -> int {
+    x
+}

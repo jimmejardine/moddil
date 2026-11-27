@@ -12,6 +12,7 @@ shows the value of each part of its condition. The rest of the command set (`dif
 ```
 moddil check file.moddil           # report errors (exit 1 if any)
 moddil doc dir [-o out]            # its API pages, a Markdown file a module (target/doc)
+moddil explain file.moddil [item]  # what its derives, wrappers and tagged literals expand to
 moddil run file.moddil             # run `fn main()` natively and print its result (70 on a trap)
 moddil test file.moddil            # run the file's `test` items natively, checking `// =>` values
 moddil run --interp file.moddil    # the same on the MIR interpreter (and `test --interp`)

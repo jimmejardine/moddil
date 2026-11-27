@@ -1,0 +1,53 @@
+// covers: attr.around.args.1
+
+fn plain<A, R>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R {
+    inner(args)
+}
+
+// Prefixes what the body gives with a label: a `String`, cloned at each call.
+fn labelled<A>(label: String, f: &FnInfo, args: A, inner: impl FnOnce(A) -> String) -> String {
+    let r = inner(args);
+    fmt"{label}{r}"
+}
+
+// Scales by its table's length: a `Vec`, computed once and cloned at each call.
+fn scaled<A>(table: Vec<int>, f: &FnInfo, args: A, inner: impl FnOnce(A) -> int) -> int {
+    inner(args) * table.len()
+}
+
+const fn table(n: int) -> Vec<int> {
+    let mut v: Vec<int> = [];
+    for i in 0..n {
+        v.push(i);
+    }
+    v
+}
+
+#[around(labelled(fmt"<{1 + 1}> "))]
+fn shown<T: Debug>(x: T) -> String {
+    fmt"{x:?}"
+}
+
+#[around(scaled(table(3)))]
+fn tripled(x: int) -> int {
+    x
+}
+
+#[around(scaled(table(4)))]
+fn quadrupled<T>(x: T, n: int) -> int {
+    n
+}
+
+test "a generic function's wrapper arguments are computed once, when compiling" {
+    shown(1)  // => "<2> 1"
+    ;
+    shown(true)  // => "<2> true"
+    ;
+    quadrupled("a", 2)  // => 8
+}
+
+test "an argument that is `Clone` is a clone of its static data" {
+    tripled(5)  // => 15
+    ;
+    tripled(1)  // => 3
+}

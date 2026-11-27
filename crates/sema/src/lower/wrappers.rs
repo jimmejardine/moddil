@@ -27,11 +27,12 @@ impl Lowerer<'_> {
         body: Option<&ast::Block>,
     ) -> ExprId {
         let whole = attrs[0].text_range();
-        let args_adt = match self.item(&crate::wrap::args_name(&sig.name)) {
+        let key = crate::wrap::key(self.items, sig).unwrap_or_default();
+        let args_adt = match self.item(&crate::wrap::args_name(&key)) {
             Some(Def::Adt(a)) => Some(a),
             _ => None,
         };
-        let info = match self.item(&crate::wrap::info_name(&sig.name)) {
+        let info = match self.item(&crate::wrap::info_name(&key)) {
             Some(Def::Fn(f)) => Some(f),
             _ => None,
         };
@@ -175,7 +176,9 @@ impl Lowerer<'_> {
                     .into_iter()
                     .map(|a| {
                         let at = self.out.body.exprs[a].range;
-                        self.alloc(ExprKind::ConstBlock(a), at)
+                        let block = self.alloc(ExprKind::ConstBlock(a), at);
+                        self.out.body.wrapper_args.insert(block);
+                        block
                     })
                     .collect();
                 Some(Wrapper {

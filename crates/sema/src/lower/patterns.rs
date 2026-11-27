@@ -387,6 +387,29 @@ impl Lowerer<'_> {
                     Some((a, 0))
                 }
                 Ok((Def::Variant(a, v), n)) if n == names.len() => Some((a, v)),
+                // `f::Args { … }`, `Type::method::Args { … }` (`attr.around.args.2`).
+                Ok((Def::Fn(f), n)) if n + 1 == names.len() && names[n] == "Args" => {
+                    match crate::wrap::args_items(self.items, f) {
+                        Some((adt, _)) => Some((adt, 0)),
+                        None => {
+                            let name = self.items.fns[f as usize].name.clone();
+                            self.report(
+                                Code::E0102,
+                                range,
+                                format!("`{name}` has no `Args`: only a wrapped function has"),
+                            );
+                            None
+                        }
+                    }
+                }
+                Ok((Def::Adt(a), n))
+                    if n + 2 == names.len()
+                        && names[n + 1] == "Args"
+                        && let Some(f) = crate::wrap::inherent_method(self.items, a, names[n])
+                        && let Some((adt, _)) = crate::wrap::args_items(self.items, f) =>
+                {
+                    Some((adt, 0))
+                }
                 Ok((Def::Adt(a), n)) if n + 1 == names.len() => {
                     let adt = &self.items.adts[a as usize];
                     match adt.variant(names[n]).filter(|_| adt.is_enum) {

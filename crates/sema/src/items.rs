@@ -473,6 +473,9 @@ pub struct AdtDef {
     pub repr_c: bool,
     /// `#[export(python)]`: a class of the mod's Python module (`ffi.python.2`).
     pub py_export: bool,
+    /// How a hidden struct is shown, where its name is not what code names it by: a wrapped
+    /// function's arguments, `f::Args` (`attr.around.args.1`).
+    pub shown: Option<String>,
 }
 
 /// A `type` item (`refine.1`): `type X = T;`, an alias, or `type X = T where p;`, a refinement.
@@ -656,7 +659,9 @@ impl AdtDef {
     /// How variant `v` is written: `Point` for a struct, `Shape::Circle` for an enum's variant,
     /// `Some` for a variant named on its own.
     pub fn path(&self, v: u32) -> String {
-        if self.bare_variants {
+        if let Some(s) = &self.shown {
+            s.clone()
+        } else if self.bare_variants {
             self.variants[v as usize].name.clone()
         } else if self.is_enum {
             format!("{}::{}", self.name, self.variants[v as usize].name)
@@ -910,6 +915,23 @@ impl ItemTree {
             }
             crate::Item::Closure(..) => false,
         }
+    }
+
+    /// Whether `const { }` block `e` of `body`, the body of `item`, of type `ty`, is computed
+    /// once, when compiling: one of a body whose blocks are (`freezes_blocks`), or a wrapper's
+    /// argument (`attr.around.args.1`) of a function that is not a const item, whose type
+    /// names none of the function's type parameters.
+    pub fn freezes_block(
+        &self,
+        item: crate::Item,
+        body: &crate::hir::Body,
+        e: crate::hir::ExprId,
+        ty: &Ty,
+    ) -> bool {
+        self.freezes_blocks(item)
+            || (body.wrapper_args.contains(&e)
+                && !ty.has_param()
+                && matches!(item, crate::Item::Fn(f) if !self.fns[f as usize].const_item))
     }
 
     /// The prelude's free function `name`, which the compiler calls for some forms

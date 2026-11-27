@@ -436,6 +436,42 @@ fn alias_type(
     def.ty.subst(&args)
 }
 
+/// `f::Args` (`Type::method::Args`), written as `seg`: the alias of wrapped function `f`'s
+/// arguments, with `seg`'s arguments for the function's type parameters.
+fn args_alias(
+    f: u32,
+    seg: &Segment,
+    range: TextRange,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> Ty {
+    match crate::wrap::args_items(scope.tree, f) {
+        Some((_, Some(t))) => alias_type(t, seg, range, scope, diags),
+        Some((_, None)) => {
+            diags.push(Diagnostic::error(
+                Code::E0102,
+                range,
+                format!(
+                    "`{}::Args` has no type to name: a parameter's type is `impl Trait`",
+                    scope.tree.fns[f as usize].name
+                ),
+            ));
+            Ty::Error
+        }
+        None => {
+            diags.push(Diagnostic::error(
+                Code::E0102,
+                range,
+                format!(
+                    "`{}` has no `Args`: only a wrapped function has (`#[around(…)]`)",
+                    scope.tree.fns[f as usize].name
+                ),
+            ));
+            Ty::Error
+        }
+    }
+}
+
 fn type_of_item(tree: &ItemTree, t: u32) -> Ty {
     let def = &tree.types[t as usize];
     match def.refinement {
@@ -833,26 +869,17 @@ pub(crate) fn path_type(
             let last = segs.last().expect("two or more segments");
             match tree.path(scope.module, &names, scope.prelude_first) {
                 // `f::Args`: a wrapped function's arguments (`attr.around.args.1`), the alias
-                // its expansion has beside it.
+                // its expansion has beside it, taking the function's type parameters
+                // (`f::Args<T>`); `Type::method::Args` for a method (`attr.around.method.1`).
                 Ok((Def::Fn(f), n)) if n + 1 == segs.len() && last.name == "Args" => {
-                    no_args(last, diags);
-                    let sig = &tree.fns[f as usize];
-                    let alias = crate::wrap::args_type_name(&sig.name);
-                    match tree.lookup(sig.module, &alias, false) {
-                        Some(Def::Type(t)) => type_of_item(tree, t),
-                        _ => {
-                            diags.push(Diagnostic::error(
-                                Code::E0102,
-                                range,
-                                format!(
-                                    "`{}` has no `Args`: only a wrapped function without type \
-                                     parameters has (`#[around(…)]`)",
-                                    sig.name
-                                ),
-                            ));
-                            Ty::Error
-                        }
-                    }
+                    args_alias(f, last, range, scope, diags)
+                }
+                Ok((Def::Adt(a), n))
+                    if n + 2 == segs.len()
+                        && last.name == "Args"
+                        && let Some(f) = crate::wrap::inherent_method(tree, a, &segs[n].name) =>
+                {
+                    args_alias(f, last, range, scope, diags)
                 }
                 Ok((Def::Adt(a), n)) if n == segs.len() => {
                     let args = adt_args(a, last.args.as_ref(), range, scope, diags);

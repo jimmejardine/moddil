@@ -300,27 +300,64 @@ pub(crate) fn expand<'t>(
             }
             continue;
         }
-        if node.kind() == K::FN_ITEM {
-            let attrs = crate::wrap::around_attrs(&node);
-            let (Some(first), Some(params), Src::File(f)) =
-                (attrs.first(), crate::wrap::params(&node), src)
-            else {
+        // A wrapped function's items (`attr.around.1`), and those of each wrapped method of an
+        // inherent impl (`attr.around.method.1`).
+        if node.kind() == K::FN_ITEM || node.kind() == K::IMPL_ITEM {
+            let Src::File(f) = src else {
                 continue;
             };
-            let name = name_of(&node);
-            let mut path = paths.get(f as usize).cloned().unwrap_or_default();
-            path.push(name.clone());
-            let range = first.text_range();
-            let generic = node.child(K::GENERIC_PARAMS).is_some();
-            let described = crate::wrap::attrs_and_effects(&node);
-            for line in crate::wrap::items(&name, &path.join("::"), &params, generic, &described) {
-                let start = out.text.len() as u32;
-                out.text.push_str(&line);
-                let end = out.text.len() as u32;
-                out.text.push('\n');
-                out.origins.push((TextRange::new(start, end), src, range));
+            let module = paths.get(f as usize).cloned().unwrap_or_default();
+            let (fns, owner) = if node.kind() == K::FN_ITEM {
+                (vec![node.clone()], None)
+            } else {
+                let Some(owner) = crate::wrap::impl_self(&node) else {
+                    continue;
+                };
+                let fns = node
+                    .child(K::IMPL_BODY)
+                    .map(|b| b.children().filter(|c| c.kind() == K::FN_ITEM).collect())
+                    .unwrap_or_default();
+                (fns, Some(owner))
+            };
+            for func in fns {
+                let attrs = crate::wrap::around_attrs(&func);
+                let (Some(first), Some(params)) = (attrs.first(), crate::wrap::params(&func))
+                else {
+                    continue;
+                };
+                let name = name_of(&func);
+                let mut path = module.clone();
+                let mut generics = Vec::new();
+                let (key, shown) = match &owner {
+                    Some((ty, _)) => {
+                        path.push(ty.clone());
+                        generics.extend(crate::wrap::generic_decls(&node));
+                        (format!("{ty}_{name}"), format!("{ty}::{name}::Args"))
+                    }
+                    None => (name.clone(), format!("{name}::Args")),
+                };
+                path.push(name.clone());
+                generics.extend(crate::wrap::generic_decls(&func));
+                let named = crate::wrap::Named {
+                    key: &key,
+                    shown,
+                    path: path.join("::"),
+                    generics,
+                    self_ty: owner.as_ref().map(|(_, t)| t.clone()),
+                };
+                let range = first.text_range();
+                let described = crate::wrap::attrs_and_effects(&func);
+                for line in crate::wrap::items(&named, &params, &described) {
+                    let start = out.text.len() as u32;
+                    out.text.push_str(&line);
+                    let end = out.text.len() as u32;
+                    out.text.push('\n');
+                    out.origins.push((TextRange::new(start, end), src, range));
+                }
             }
-            continue;
+            if node.kind() == K::FN_ITEM {
+                continue;
+            }
         }
         if !matches!(node.kind(), K::STRUCT_ITEM | K::ENUM_ITEM | K::VIEW_ITEM) {
             continue;

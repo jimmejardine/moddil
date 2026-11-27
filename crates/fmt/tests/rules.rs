@@ -89,3 +89,9 @@ fn one_blank_line_is_kept_but_none_at_a_block_s_ends() {
 fn spacing_within_a_line_comes_from_the_token_table() {
     insta::assert_snapshot!(fmt("fn f(a:int,b:int)->int{let x=a+b*2;let r=&x;-a+*r}"));
 }
+
+#[test]
+fn an_attributes_input_keeps_its_prefix_operators_as_written() {
+    let src = "#[around(w(&table(), -1, !b, a & c))]\nfn f() {}\n";
+    assert_eq!(fmt(src), src);
+}

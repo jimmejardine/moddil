@@ -300,10 +300,10 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
             {
                 cx.contracts(f.syntax(), &sig.ret);
             }
-            // Wrappers (`attr.around.1`), on a free function that is not `const`, with plain
-            // parameters.
+            // Wrappers (`attr.around.1`), on a free function or an inherent impl's method
+            // (`attr.around.method.1`) that is not `const`, with plain parameters.
             if let Some(f) = &node
-                && matches!(sig.container, Container::Free)
+                && crate::wrap::key(cx.items, sig).is_some()
                 && !sig.is_const
                 && sig.src.is_file()
                 && crate::wrap::params(f.syntax()).is_some()

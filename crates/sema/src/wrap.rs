@@ -42,6 +42,108 @@ pub(crate) fn args_type_name(f: &str) -> String {
     format!("__ArgsType_{f}")
 }
 
+/// The name a wrapped function's hidden items are keyed by: a free function's name, or for a
+/// method of an inherent impl, `Type_method` (`attr.around.method.1`). `None` for a method of a
+/// trait, or of a trait's impl.
+pub(crate) fn key(items: &crate::ItemTree, sig: &crate::items::FnSig) -> Option<String> {
+    match sig.container {
+        crate::Container::Free => Some(sig.name.clone()),
+        crate::Container::Impl(k) => {
+            let imp = &items.impls[k as usize];
+            match (&imp.trait_ref, &imp.self_ty) {
+                (None, crate::Ty::Adt(_, n, _)) => Some(format!("{n}_{}", sig.name)),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// The hidden items of wrapped function `f`'s `Args` (`attr.around.args.1`): its struct, and the
+/// alias naming it at the parameters' types, if there is one. `None` if `f` is not wrapped.
+pub(crate) fn args_items(items: &crate::ItemTree, f: u32) -> Option<(u32, Option<u32>)> {
+    use crate::items::Def;
+    let sig = &items.fns[f as usize];
+    let key = key(items, sig)?;
+    let Some(Def::Adt(adt)) = items.lookup(sig.module, &args_name(&key), false) else {
+        return None;
+    };
+    let alias = match items.lookup(sig.module, &args_type_name(&key), false) {
+        Some(Def::Type(t)) => Some(t),
+        _ => None,
+    };
+    Some((adt, alias))
+}
+
+/// The method `name` of an inherent impl of struct or enum `adt` (`Type::method::Args`).
+pub(crate) fn inherent_method(items: &crate::ItemTree, adt: u32, name: &str) -> Option<u32> {
+    items.fns.iter().enumerate().find_map(|(i, sig)| {
+        let crate::Container::Impl(k) = sig.container else {
+            return None;
+        };
+        let imp = &items.impls[k as usize];
+        (sig.name == name
+            && imp.trait_ref.is_none()
+            && matches!(imp.self_ty, crate::Ty::Adt(a, ..) if a == adt))
+        .then_some(i as u32)
+    })
+}
+
+/// For an inherent impl `node`, its self type's name (`Counter` of `impl<T> Counter<T>`) and its
+/// text as written; `None` for a trait's impl.
+pub(crate) fn impl_self(node: &SyntaxNode) -> Option<(String, String)> {
+    if node.kind() != K::IMPL_ITEM || node.token(K::FOR_KW).is_some() {
+        return None;
+    }
+    let ty = node.children().find_map(ast::Type::cast)?;
+    let text = squeezed(&ty.syntax().text().to_string());
+    let name = text
+        .split('<')
+        .next()?
+        .rsplit("::")
+        .next()?
+        .trim()
+        .to_string();
+    Some((name, text))
+}
+
+/// The generic parameters of `node` (a function or impl), each as an alias declares it: a type
+/// parameter's name, or a const parameter as written (`const N: int`).
+pub(crate) fn generic_decls(node: &SyntaxNode) -> Vec<String> {
+    node.child(K::GENERIC_PARAMS)
+        .map(|g| {
+            g.children()
+                .filter_map(|p| match p.kind() {
+                    K::TYPE_PARAM => ast::name(&p).map(|n| n.text()),
+                    K::CONST_PARAM => Some(squeezed(&p.text().to_string())),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `ty` with each `Self` in it made `self_ty`.
+fn with_self(ty: &str, self_ty: &str) -> String {
+    let mut out = String::new();
+    let mut word = String::new();
+    for c in ty.chars().chain(std::iter::once(' ')) {
+        if c.is_alphanumeric() || c == '_' {
+            word.push(c);
+            continue;
+        }
+        if word == "Self" {
+            out.push_str(self_ty);
+        } else {
+            out.push_str(&word);
+        }
+        word.clear();
+        out.push(c);
+    }
+    out.pop();
+    out
+}
+
 /// Text with its whitespace runs made single spaces.
 fn squeezed(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -74,17 +176,19 @@ pub(crate) fn attrs_and_effects(node: &SyntaxNode) -> (Vec<String>, Vec<String>)
 }
 
 /// A wrapped function's parameters, each its name, whether it is `mut`, and its type as
-/// written; `None` if one is not a plain name (or is `self`).
+/// written; `None` if one is not a plain name. A method's `self` is the field `this`, of type
+/// `Self`, `&Self` or `&mut Self` (`attr.around.method.1`).
 pub(crate) fn params(node: &SyntaxNode) -> Option<Vec<(String, bool, String)>> {
     let f = ast::FnItem::cast(node.clone())?;
-    if node
-        .descendants()
-        .into_iter()
-        .any(|n| n.kind() == K::SELF_PARAM)
-    {
-        return None;
-    }
     let mut out = Vec::new();
+    if let Some(s) = f.params().and_then(|l| l.syntax().child(K::SELF_PARAM)) {
+        let ty = match (s.token(K::AMP).is_some(), s.token(K::MUT_KW).is_some()) {
+            (true, true) => "&mut Self",
+            (true, false) => "&Self",
+            (false, _) => "Self",
+        };
+        out.push(("this".to_string(), false, ty.to_string()));
+    }
     for p in f
         .params()
         .map(|l| l.params().collect::<Vec<_>>())
@@ -156,22 +260,34 @@ pub(crate) fn input(text: &str, attr: &SyntaxNode) -> Option<ast::Expr> {
     Some(e.clone())
 }
 
+/// How a wrapped function is named in its expansion: the key of its hidden items (`key`), how
+/// its `Args` is shown (`f::Args`, `Type::method::Args`), its path for `FnInfo`, its type
+/// parameters (and its impl's) as the alias declares them, and an impl's self type as written.
+pub(crate) struct Named<'a> {
+    pub(crate) key: &'a str,
+    pub(crate) shown: String,
+    pub(crate) path: String,
+    pub(crate) generics: Vec<String>,
+    pub(crate) self_ty: Option<String>,
+}
+
 /// The Moddil source of the items a wrapped function's expansion names, one per line: the
-/// arguments' struct, its derived impls, the alias `f::Args` names (for a function without type
-/// parameters, `generic` false), and the description, with `path` the function's path and
-/// `attrs` and `effects` its attributes and effects as written.
+/// arguments' struct, its derived impls, the alias `f::Args` names (generic over the function's
+/// type parameters), and the description, with `attrs` and `effects` its attributes and effects
+/// as written.
 pub(crate) fn items(
-    f: &str,
-    path: &str,
+    named: &Named<'_>,
     params: &[(String, bool, String)],
-    generic: bool,
     (attrs, effects): &(Vec<String>, Vec<String>),
 ) -> Vec<String> {
+    let f = named.key;
+    let path = named.path.as_str();
     let args = args_name(f);
     let generics: Vec<String> = (0..params.len()).map(|i| format!("P{i}")).collect();
     let mut out = Vec::new();
+    let shown_attr = format!("#[shown({:?})] ", named.shown);
     if params.is_empty() {
-        out.push(format!("struct {args};"));
+        out.push(format!("{shown_attr}struct {args};"));
     } else {
         let fields: Vec<String> = params
             .iter()
@@ -179,30 +295,61 @@ pub(crate) fn items(
             .map(|((n, _, _), g)| format!("{n}: {g}"))
             .collect();
         out.push(format!(
-            "struct {args}<{}> {{ {} }}",
+            "{shown_attr}struct {args}<{}> {{ {} }}",
             generics.join(", "),
             fields.join(", ")
         ));
     }
-    let shown = format!("{f}::Args");
+    let shown = &named.shown;
     let names: Vec<String> = params.iter().map(|(n, _, _)| n.clone()).collect();
     for tr in ["Debug", "Clone", "PartialEq"] {
         out.push(crate::derive::struct_impl(
-            tr, &args, &shown, &generics, &names,
+            tr, &args, shown, &generics, &names,
         ));
     }
-    if !generic {
-        let types: Vec<&str> = params.iter().map(|(_, _, t)| t.as_str()).collect();
+    // `f::Args` as a type (`attr.around.args.1`): the struct at the parameters' types, generic
+    // over the function's type parameters. A parameter of type `impl Trait` has no type to name.
+    let types: Vec<String> = params
+        .iter()
+        .map(|(_, _, t)| match &named.self_ty {
+            Some(s) => with_self(t, s),
+            None => t.clone(),
+        })
+        .collect();
+    if !types.iter().any(|t| {
+        t.starts_with("impl ")
+            || t.contains(" impl ")
+            || t.contains("<impl ")
+            || t.contains("&impl ")
+    }) {
         let at = if types.is_empty() {
             String::new()
         } else {
             format!("<{}>", types.join(", "))
         };
-        out.push(format!("type {} = {args}{at};", args_type_name(f)));
+        let decl = if named.generics.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", named.generics.join(", "))
+        };
+        out.push(format!("type {}{decl} = {args}{at};", args_type_name(f)));
     }
+    // A method's `self` is the field `this`, and the parameter `self`.
+    let receiver = named.self_ty.is_some()
+        && params.first().is_some_and(|(n, _, t)| {
+            n == "this" && matches!(t.as_str(), "Self" | "&Self" | "&mut Self")
+        });
     let infos: Vec<String> = params
         .iter()
-        .map(|(n, _, t)| format!("ParamInfo {{ name: fmt{n:?}, ty: fmt{:?} }}", escape(t)))
+        .enumerate()
+        .map(|(i, (n, _, t))| {
+            let n = if i == 0 && receiver {
+                "self"
+            } else {
+                n.as_str()
+            };
+            format!("ParamInfo {{ name: fmt{n:?}, ty: fmt{:?} }}", escape(t))
+        })
         .collect();
     let texts = |xs: &[String]| -> String {
         let xs: Vec<String> = xs.iter().map(|x| format!("fmt{:?}", escape(x))).collect();

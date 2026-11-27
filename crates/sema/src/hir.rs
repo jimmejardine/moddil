@@ -94,6 +94,9 @@ pub struct Body {
     /// Each tagged literal's `const { }` block (`comptime.tag.1`): where the text its tag was
     /// given is in the file, for an error compile-time code reports in it (`compile_error`).
     pub tagged: std::collections::BTreeMap<ExprId, TagText>,
+    /// Each wrapper's compile-time argument, a `const { }` block (`attr.around.args.1`): computed
+    /// once, when compiling, in a generic function too, for it names none of its parameters.
+    pub wrapper_args: std::collections::BTreeSet<ExprId>,
     /// Every expression written inside an `unsafe` block: where a C function may be called
     /// (`ffi.extern.1`).
     pub in_unsafe: std::collections::HashSet<ExprId>,

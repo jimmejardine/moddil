@@ -741,3 +741,39 @@ fn hidden() {}
     assert!(page.contains("A documented file."), "{page}");
     assert!(!page.contains("hidden"), "{page}");
 }
+
+/// `moddil explain` prints what the compiler writes for an item: a wrapped function's hidden
+/// items and its body as the wrapper call it is, and a derive's impl, each under where it comes
+/// from (`toolchain.md`).
+#[test]
+fn explain_prints_an_items_expansion() {
+    let text = "fn plain<A, R>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R { inner(args) }\n\
+                #[around(plain)]\n\
+                fn add(a: int, b: int) -> int { a + b }\n\
+                #[derive(Clone)]\n\
+                struct P { x: int }\n";
+    let path = file("explain.moddil", text);
+    let out = moddil(&["explain"], &path);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{stdout}");
+    assert!(stdout.contains("// add: #[around(plain)]"), "{stdout}");
+    assert!(stdout.contains("struct __Args_add<P0, P1> {"), "{stdout}");
+    assert!(
+        stdout.contains("plain(&__INFO_add, add::Args { a, b }, |add::Args { a, b }| { a + b })"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("impl Clone for P {}"), "{stdout}");
+    assert!(
+        stdout.contains("the template of `derive_clone`"),
+        "{stdout}"
+    );
+    let only = Command::new(env!("CARGO_BIN_EXE_moddil"))
+        .arg("explain")
+        .arg(&path)
+        .arg("P")
+        .output()
+        .expect("moddil runs");
+    let only = String::from_utf8_lossy(&only.stdout);
+    assert!(only.contains("impl Clone for P"), "{only}");
+    assert!(!only.contains("__Args_add"), "{only}");
+}

@@ -767,9 +767,16 @@ fn closures() {
 fn wrappers_not_supported_yet() {
     let w = "fn w<A, R>(f: &FnInfo, a: A, inner: impl FnOnce(A) -> R) -> R { inner(a) }\n";
     ok(&format!("{w}#[around(w)] fn f(x: int) -> int {{ x }}"));
+    ok(&format!(
+        "{w}struct S;\nimpl S {{\n#[around(w)] fn m(&self) -> int {{ 1 }}\n}}"
+    ));
+    // A trait's impl's method: its `Type::method::Args` would not say which trait's.
     err(
-        &format!("{w}struct S;\nimpl S {{\n#[around(w)] fn m(&self) -> int {{ 1 }}\n}}"),
-        &[("I0001", 4)],
+        &format!(
+            "{w}struct S;\ntrait T {{ fn m(&self) -> int; }}\n\
+             impl T for S {{\n#[around(w)] fn m(&self) -> int {{ 1 }}\n}}"
+        ),
+        &[("I0001", 5)],
     );
     err(
         &format!("{w}#[around(w)] const fn c() -> int {{ 1 }}"),

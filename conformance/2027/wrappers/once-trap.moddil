@@ -1,0 +1,16 @@
+// covers: attr.around.args.1
+
+fn picked<A, R>(at: int, f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R {
+    inner(args)
+}
+
+const fn nth(i: int) -> int {
+    let xs = [1, 2];
+    xs[i]
+}
+
+// Computed when compiling, in a generic function too: its trap is an error here.
+#[around(picked(nth(5)))]  //~ E1004
+fn generic<T>(x: T) -> T {
+    x
+}

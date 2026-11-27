@@ -89,13 +89,26 @@ lists, each as written (`fail(Late)`). `&INFO` is static data
 **attr.around.args.1** `f::Args` is a struct with a field of each parameter's type for each
 parameter, named like it; it is a view if a parameter is a borrow ([Views](views.md)), and it
 implements `Debug`, `Clone` and `PartialEq` when every parameter's type does. Its `Debug` writes
-`f::Args { p₁: …, … }`. In code, `f::Args` names it as a type, at the parameters' types, for a
-function without type parameters (E0102 for a function that is not wrapped); it is not yet made
-or matched by that name. `#[around(w(c₁, …))]` passes the arguments `c₁, …` before `&INFO`;
-they are compile-time code (E1001), each a `const { }` block: evaluated once, when compiling, and
-copied or cloned at each call (**comptime.block.2**, **comptime.block.3**); one neither `Copy` nor
-`Clone`, or of a generic function, is evaluated at each call for now. They cannot name the
-parameters (E0101).
+`f::Args { p₁: …, … }`. In code, `f::Args` names it as a type, at the parameters' types, and for
+a generic function it takes the function's type parameters, `f::Args<T>` (E0102 for a function
+that is not wrapped, or one with a parameter of type `impl Trait`, which has no type to name).
+`#[around(w(c₁, …))]` passes the arguments `c₁, …` before `&INFO`; they are compile-time code
+(E1001), each a `const { }` block, and cannot name the parameters (E0101). Each is evaluated
+once, when compiling, in a generic function too, as it names none of its type parameters: its
+value is static data, as a const's is (**comptime.static.1**), borrowed in place, copied if its
+type is `Copy`, or cloned at each call if it is `Clone` (**comptime.block.3**). One neither,
+passed by value, would be moved out of static data, and is an error (E1009); a wrapper takes
+such a value by reference. One that traps when compiling is an error at the attribute (E1004).
+
+**attr.around.args.2** `f::Args { p₁: e₁, … }` makes the arguments by that name, and
+`f::Args { p₁, … }` matches them, as a struct's name does ([Patterns](patterns.md)); a generic
+function's take its type arguments, `f::Args::<T> { … }`.
+
+**attr.around.method.1** A method of an inherent impl may be wrapped: its `self` is the field
+`this` of its arguments, of the type `Self`, `&Self` or `&mut Self` its receiver has, and in the
+body `self` is that field again. Its arguments are `Type::method::Args`, `INFO.path` is
+`Type::method` in its mod, and `INFO.params` gives the receiver as the parameter `self`. A
+method of a trait, or of a trait's impl, is not wrapped yet (I0001).
 
 **attr.around.order.1** With several wrappers, the first written is outermost: its closure calls
 the second, with the arguments as it gives them, and the last's closure runs the body.
@@ -109,5 +122,5 @@ or effect the function does not have (E0501, E0603): a private function's are in
 around its wrappers: its preconditions before the first wrapper runs, and its postconditions on
 what the first wrapper returns.
 
-**attr.around.limits.1** For now, a wrapped function is a free function, not a `const fn`, whose
-parameters are names (I0001).
+**attr.around.limits.1** For now, a wrapped function is a free function or a method of an
+inherent impl, not a `const fn`, whose parameters are names (I0001).

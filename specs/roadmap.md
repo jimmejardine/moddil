@@ -78,15 +78,6 @@ L)
 - Contracts on trait methods, binding every impl: the trait's `requires` and `ensures`, written
   in the trait's file and scope, checked on entry to and return from each impl's method.
 
-**P13. Wrappers** (`crates/sema` `wrap.rs`, `crates/moddil`; M)
-- Wrapping methods (a field to hold `self`). The design: the field is `this`, and
-  the struct is named `Type::method::Args`.
-- Wrapper arguments neither `Copy` nor `Clone`, or of a generic function, evaluated once, not at
-  each call (the others are, as `const { }` blocks are: `comptime.block.3`; P11 has the rest).
-- `f::Args` made and matched by that name (`f::Args { a, b }`), and for a generic function,
-  which takes its type parameters (`f::Args<T>`).
-- `moddil explain` printing the expansion (the command itself is not built).
-
 **P15. Selectable trait methods** (`crates/mir` `build/select.rs`, `crates/interp`,
 `crates/native`; L)
 - A `select` arm on a `#[selectable]` trait method reached through a bound
@@ -351,6 +342,11 @@ Debug builds and `runtime-sim` report leaked `Rc` cycles with their allocation s
 (`memory.md`: no garbage collector). The compiler gives each type a trace of the `Rc`s it holds;
 the runtime keeps the live allocations, and at a run's end (or on asking) finds those only
 reachable from each other.
+
+**P69. Wrapping a trait's methods** (`crates/sema` `wrap.rs`, `crates/refinterp`; M). A method
+of an inherent impl may be wrapped (`attr.around.method.1`); one of a trait, or of a trait's
+impl, is I0001: its hidden items are keyed by type and method (`__Args_Type_method`), which two
+traits' methods of one name would share, and `Type::method::Args` would not say which trait's.
 
 ## Known limits, with no package yet
 - ThreadSanitizer cannot follow tasks yet: on coroutines' stacks it crashes in

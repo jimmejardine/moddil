@@ -61,6 +61,13 @@ pub(crate) fn between(prev: &SyntaxToken, cur: &SyntaxToken, ws: bool) -> bool {
     {
         return false;
     }
+    // An attribute's input is tokens, not expressions: whether `&` there is a prefix
+    // (`#[around(w(&table()))]`) or an operator, the source says.
+    if matches!(pp.kind(), K::ATTR_INPUT | K::TOKEN_TREE)
+        && matches!(p, K::MINUS | K::BANG | K::STAR | K::AMP)
+    {
+        return ws;
+    }
     // Generic parameters and arguments: `Vec<T>`, `f::<T>()`, `<T as Tr>::X`.
     let angled = |n: &SyntaxNode| {
         matches!(

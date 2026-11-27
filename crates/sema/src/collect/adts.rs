@@ -69,6 +69,7 @@ impl Collector<'_> {
             root: false,
             repr_c: false,
             py_export: false,
+            shown: None,
         });
     }
 
@@ -173,6 +174,15 @@ impl Collector<'_> {
             {
                 // A Python class (`ffi.python.2`).
                 self.tree.adts[i].py_export = true;
+            } else if path == ["shown"]
+                && self.tree.adts[i].name.starts_with("__Args_")
+                && let Some(s) = input
+                    .as_deref()
+                    .and_then(|s| s.strip_prefix("(\""))
+                    .and_then(|s| s.strip_suffix("\")"))
+            {
+                // How the expansion's hidden struct is shown (`attr.around.args.1`).
+                self.tree.adts[i].shown = Some(s.to_string());
             } else if path != ["derive"] {
                 ds.push(Diagnostic::unsupported(attr.text_range(), "this attribute"));
             }

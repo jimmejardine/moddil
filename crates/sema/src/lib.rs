@@ -29,6 +29,7 @@ mod db;
 mod derive;
 mod diag;
 mod exhaust;
+mod explain;
 pub mod hir;
 mod items;
 mod lower;
@@ -49,6 +50,7 @@ pub use db::{
     TagAnswer, TagRequest,
 };
 pub use diag::{CODES, Code, Diagnostic, Severity};
+pub use explain::{Explained, explain};
 pub use items::{
     AdtDef, Container, Control, Def, EffectSig, Entry, FieldDef, FnSig, GenericParam, Generics,
     ImplDef, Import, ItemTree, ModDef, ModuleDef, PRELUDE_MOD, PRELUDE_MODULE, ParamSig, Pred,
