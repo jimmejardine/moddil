@@ -20,3 +20,4 @@ regex = { path = "../regex" }
 gpu = { path = "../gpu" }
 web = { path = "../web" }
 reflect = { path = "../reflect" }
+text = { path = "../text" }

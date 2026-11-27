@@ -318,8 +318,6 @@ with dependencies of their own, `mod name;` with a generating attribute, and `St
 
 **P57. Header import through libclang** (`#[c_import]`), with annotation overlays; C on WASM (L).
 
-**P58. Graphemes**, from Unicode's data (`mods/text`; M).
-
 **P59. The Mandelbulb browser program** as an exported `Flight` the page drives, in the Svelte
 app (M).
 

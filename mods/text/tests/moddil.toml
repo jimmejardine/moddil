@@ -1,0 +1,6 @@
+[mod]
+name = "text_tests"
+edition = "2027"
+
+[dependencies]
+text = { path = ".." }

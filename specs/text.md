@@ -95,7 +95,10 @@ Strings are not indexed by integers.
   `.graphemes()` (user-perceived characters). Grapheme, word and sentence segmentation, display
   width and normalisation live in `moddil/text`, part of the default batteries; core keeps UTF-8,
   scalar values and positions. *Why:* the Unicode tables are large, and freestanding binaries stay
-  small. Counting characters is `s.chars().count()`, visibly O(n).
+  small. Counting characters is `s.chars().count()`, visibly O(n). **As built:** `moddil/text`
+  has graphemes, `use text::Graphemes;` giving `str` its `graphemes()`, `grapheme_count()` and
+  `grapheme_bounds()`, from Unicode 16.0's data (`tools/unicodedata.py`); words, sentences,
+  display width and normalisation come later.
 - **A position belongs to its string, by type.** A `StrPos` is a view
   ([`memory.md`: View types](memory.md#view-types)) derived from a borrow of
   the string it was found in, in the same way an accelerator buffer is branded with its device

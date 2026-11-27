@@ -17,6 +17,7 @@ pub use regex;
 pub use gpu;
 pub use web;
 pub use reflect;
+pub use text;
 pub use runtime::root;
 pub use runtime::io;
 pub use runtime::cpus;

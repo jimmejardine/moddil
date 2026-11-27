@@ -19,6 +19,7 @@ umbrella mod [`moddil`](moddil/README.md), which re-exports them.
 | [`crypto`](crypto/src/lib.moddil) | SHA-256, SHA-512 and BLAKE3, and `hex`; not constant-time | |
 | [`num`](num/src/lib.moddil) | `BigInt` and `Rational` | |
 | [`time`](time/src/lib.moddil) | `Date` (proleptic Gregorian), `TimeOfDay`, `DateTime` and `Timestamp`, with ISO 8601 and RFC 3339 text, and time zones: the IANA database compiled into the mod (`tools/zonedata.py`), POSIX TZ rules, and wall times both ways; no clock yet | |
+| [`text`](text/src/lib.moddil) | `Graphemes` for `str`: `graphemes()`, `grapheme_count()` and `grapheme_bounds()`, Unicode's extended grapheme clusters (UAX #29) from Unicode 16.0's data, compiled into the mod (`tools/unicodedata.py`) | |
 | [`regex`](regex/src/lib.moddil) | `Regex`: linear-time matching (a Pike VM), groups and named groups, `find_all`, `replace_all`; backreferences and lookaround refused | |
 | [`reflect`](reflect/src/lib.moddil) | `Reflect` and `ReflectMut` with their derives (impl templates): a type's `TypeInfo`, its `pub` fields given to a `Visit` by kind, and set by name | |
 | [`decimal`](decimal/src/lib.moddil) | `Fixed<S>` (the scale in the type) and `BigDecimal`, rounding by the prelude's `Round` | |

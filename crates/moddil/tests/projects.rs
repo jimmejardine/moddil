@@ -137,6 +137,7 @@ projects! {
     serde => "mods/serde/tests",
     sim => "mods/sim/tests",
     sync => "mods/sync/tests",
+    text => "mods/text/tests",
     time => "mods/time/tests",
     mandelbulb => "examples/mandelbulb",
     mandelbulb_web => "examples/mandelbulb/web",

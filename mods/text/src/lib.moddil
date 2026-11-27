@@ -1,0 +1,190 @@
+//! Text beyond the prelude's (`text.md`: Graphemes): a text's graphemes, the characters a reader
+//! sees, as Unicode's extended grapheme clusters (UAX #29), from the Unicode data compiled into
+//! the mod (`tools/unicodedata.py`, Unicode 16.0). `use text::Graphemes;` gives `str` its
+//! methods: `"e\u{301}".grapheme_count()` is 1, where its `chars()` are 2.
+
+use mod::data::{KINDS, RANGES};
+
+/// The version of Unicode whose data the mod segments with.
+pub fn unicode_version() -> &str {
+    mod::data::VERSION
+}
+
+/// A text's graphemes.
+pub trait Graphemes {
+    /// The byte offsets of its grapheme boundaries: its start, where each grapheme after the
+    /// first starts, and its end; none for an empty text.
+    fn grapheme_bounds(&self) -> Vec<int>;
+
+    /// Its graphemes, in order.
+    fn graphemes(&self) -> Vec<String>;
+
+    /// How many graphemes it has.
+    fn grapheme_count(&self) -> int;
+}
+
+impl Graphemes for str {
+    fn grapheme_bounds(&self) -> Vec<int> {
+        bounds(self)
+    }
+
+    fn graphemes(&self) -> Vec<String> {
+        let b = bounds(self);
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i + 1 < b.len() {
+            out.push(self.bytes_between(b[i], b[i + 1]).to_string());
+            i += 1;
+        }
+        out
+    }
+
+    fn grapheme_count(&self) -> int {
+        let n = bounds(self).len();
+        if n == 0 { 0 } else { n - 1 }
+    }
+}
+
+// The classes' letters in `KINDS`: Grapheme_Cluster_Break values,
+const CR: int = 99;
+const LF: int = 108;
+const CONTROL: int = 120;
+const EXTEND: int = 101;
+const ZWJ: int = 122;
+const REGIONAL: int = 114;
+const PREPEND: int = 112;
+const SPACING_MARK: int = 115;
+const HANGUL_L: int = 76;
+const HANGUL_V: int = 86;
+const HANGUL_T: int = 84;
+const HANGUL_LV: int = 118;
+const HANGUL_LVT: int = 116;
+// Indic_Conjunct_Break values,
+const LINKER: int = 107;
+const CONSONANT: int = 99;
+const INCB_EXTEND: int = 101;
+// and Extended_Pictographic.
+const PICTOGRAPHIC: int = 121;
+
+/// Byte `i` of `s`, as an `int`.
+fn byte(s: &str, i: int) -> int {
+    s.byte_at(i).checked_to::<int>() ?! "a byte is an int"
+}
+
+/// The value of a hex digit's byte.
+fn hex(b: int) -> int {
+    if b <= 57 { b - 48 } else { b - 87 }
+}
+
+/// The class of the range at entry `i` of `RANGES`: its index in `KINDS`, from its letter
+/// (`0`-`9`, `A`-`Z`, `a`-`z`).
+fn kind_at(i: int) -> int {
+    let b = byte(RANGES, i * 7 + 6);
+    if b <= 57 { b - 48 } else if b <= 90 { b - 55 } else { b - 61 }
+}
+
+/// Where the range at entry `i` of `RANGES` starts: its six hex digits.
+fn start_at(i: int) -> int {
+    let mut v = 0;
+    let mut k = 0;
+    while k < 6 {
+        v = v * 16 + hex(byte(RANGES, i * 7 + k));
+        k += 1;
+    }
+    v
+}
+
+/// The class of `c`: its offset in `KINDS`, found by binary search of the ranges.
+fn kind_of(c: char) -> int {
+    let cp = c.code();
+    let mut lo = 0;
+    let mut hi = RANGES.len() / 7;
+    while hi - lo > 1 {
+        let mid = (lo + hi) / 2;
+        if start_at(mid) <= cp {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    kind_at(lo) * 3
+}
+
+/// The grapheme boundaries of `s` (UAX #29's extended grapheme clusters, rules GB3 to GB999).
+fn bounds(s: &str) -> Vec<int> {
+    let mut out = Vec::new();
+    let mut prev = -1;
+    // How many regional indicators end at the last character (GB12, GB13).
+    let mut ri = 0;
+    // Whether an Extended_Pictographic character and Extend characters end there, and whether
+    // a ZWJ after them does (GB11).
+    let mut emoji = false;
+    let mut zwj = false;
+    // A consonant then Indic_Conjunct_Break Extend or Linker characters: 1, or 2 once a linker
+    // is among them (GB9c).
+    let mut conjunct = 0;
+    for (at, c) in s.char_indices() {
+        let k = kind_of(c);
+        let g = byte(KINDS, k);
+        let ic = byte(KINDS, k + 1);
+        let pictographic = byte(KINDS, k + 2) == PICTOGRAPHIC;
+        if prev < 0 || breaks(prev, g, ic, pictographic, ri, zwj, conjunct) {
+            out.push(at.offset());
+        }
+        zwj = g == ZWJ && emoji;
+        emoji = pictographic || (g == EXTEND && emoji);
+        ri = if g == REGIONAL { ri + 1 } else { 0 };
+        if ic == CONSONANT {
+            conjunct = 1;
+        } else if conjunct > 0 && ic == LINKER {
+            conjunct = 2;
+        } else if !(conjunct > 0 && ic == INCB_EXTEND) {
+            conjunct = 0;
+        }
+        prev = g;
+    }
+    if !out.is_empty() {
+        out.push(s.len());
+    }
+    out
+}
+
+/// Whether there is a boundary between a character of break class `prev` and one of `g`, given
+/// what comes before.
+fn breaks(prev: int, g: int, ic: int, pictographic: bool, ri: int, zwj: bool, conjunct: int) -> bool {
+    // GB3: CR × LF.
+    if prev == CR && g == LF {
+        return false;
+    }
+    // GB4, GB5: a break after and before a control.
+    if prev == CR || prev == LF || prev == CONTROL || g == CR || g == LF || g == CONTROL {
+        return true;
+    }
+    // GB6 to GB8: Hangul syllables.
+    if prev == HANGUL_L && (g == HANGUL_L || g == HANGUL_V || g == HANGUL_LV || g == HANGUL_LVT) {
+        return false;
+    }
+    if (prev == HANGUL_LV || prev == HANGUL_V) && (g == HANGUL_V || g == HANGUL_T) {
+        return false;
+    }
+    if (prev == HANGUL_LVT || prev == HANGUL_T) && g == HANGUL_T {
+        return false;
+    }
+    // GB9, GB9a, GB9b: extending characters, spacing marks, and after a prepend.
+    if g == EXTEND || g == ZWJ || g == SPACING_MARK || prev == PREPEND {
+        return false;
+    }
+    // GB9c: an Indic conjunct.
+    if conjunct == 2 && ic == CONSONANT {
+        return false;
+    }
+    // GB11: an emoji ZWJ sequence.
+    if zwj && pictographic {
+        return false;
+    }
+    // GB12, GB13: regional indicators in pairs.
+    if prev == REGIONAL && g == REGIONAL && ri % 2 == 1 {
+        return false;
+    }
+    true
+}
