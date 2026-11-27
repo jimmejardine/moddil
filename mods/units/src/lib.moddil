@@ -1,0 +1,4 @@
+//! Units of measure (`specs/units.md`): the packs a program names its units from, each a module
+//! of `dimension` and `unit` items: `si`, `information`, `angle` and `currency`. A program
+//! imports the units it uses, `use moddil::units::si::{m, cm, s};`. Units are the type checker's:
+//! nothing here exists at run time.

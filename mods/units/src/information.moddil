@@ -1,0 +1,14 @@
+//! Information: bits and bytes, in decimal and binary multiples.
+
+pub dimension Information;
+
+pub unit bit: Information;
+pub unit B = 8 * bit;
+pub unit kB = 1000 * B;
+pub unit MB = 1000 * kB;
+pub unit GB = 1000 * MB;
+pub unit TB = 1000 * GB;
+pub unit KiB = 1024 * B;
+pub unit MiB = 1024 * KiB;
+pub unit GiB = 1024 * MiB;
+pub unit TiB = 1024 * GiB;

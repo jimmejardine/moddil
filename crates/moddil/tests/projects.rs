@@ -140,6 +140,7 @@ projects! {
     sync => "mods/sync/tests",
     text => "mods/text/tests",
     time => "mods/time/tests",
+    units => "mods/units/tests",
     mandelbulb => "examples/mandelbulb",
     mandelbulb_web => "examples/mandelbulb/web",
     python => "examples/python",

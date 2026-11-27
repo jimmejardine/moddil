@@ -1,0 +1,64 @@
+use decimal::Fixed;
+use units::angle::deg;
+use units::currency::{EUR, USD, USc};
+use units::information::{B, KiB, MiB};
+use units::si::{K, N, cm, degC, h, kg, km, m, mm, ms, s};
+
+fn speed(d: f64[km], t: f64[h]) -> f64[km / h] {
+    d / t
+}
+
+test "lengths convert, and a sum takes the type's unit" {
+    let length: f64[m] = 100.0[cm] + 50.5[mm];
+    assert(length == 1.0505[m]);
+    let a = 1[m] + 5[cm];
+    let b: int[cm] = a;
+    assert(b == 105[cm]);
+}
+
+test "speeds and forces" {
+    let v = speed(120.0[km], 2.0[h]);
+    assert(v == 60.0[km / h]);
+    let f: f64[N] = 2.0[kg] * 3.0[m / s ^ 2];
+    assert(f == 6.0[N]);
+}
+
+test "information in binary multiples" {
+    let budget: int[B] = 64[MiB];
+    assert(budget == 67108864[B]);
+    assert(1[MiB] == 1024[KiB]);
+}
+
+test "temperatures are points" {
+    let t: f64[K] = 20.0[degC];
+    assert(t > 293.0[K] && t < 293.2[K]);
+    let d = 30.0[degC] - 20.0[degC];
+    assert(d == 10.0[K]);
+}
+
+test "angles in degrees" {
+    let x = 90.0[deg].sin();
+    assert(x > 0.9999 && x < 1.0001);
+    let timeout = 500[ms];
+    assert(timeout.to_unit::<s>(Round::Up) == 1[s]);
+}
+
+test "money in a fixed-point type keeps its currency" {
+    let a = Fixed::<2>::from_units(1050).with_unit::<USD>();
+    let b = Fixed::<2>::from_units(225).with_unit::<USD>();
+    let total = a + b;
+    assert(total > a);
+    assert(total.value_in::<USD>() == Fixed::<2>::from_units(1275));
+    let c = Fixed::<2>::from_units(100).with_unit::<EUR>();
+    assert(c.value_in::<EUR>().units() == 100);
+}
+
+test "text in units" {
+    let length = 1.25[m];
+    let text = fmt"{length:[mm]}";
+    assert(text.as_str() == "1250.0 mm");
+    let parsed = "2.5 km".parse_quantity::<f64[m]>() ?! "a length";
+    assert(parsed == 2500.0[m]);
+    let cents = "3 USD".parse_quantity::<int[USc]>() ?! "dollars";
+    assert(cents == 300[USc]);
+}

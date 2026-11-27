@@ -17,6 +17,7 @@ crypto = { path = "../crypto" }
 num = { path = "../num" }
 decimal = { path = "../decimal" }
 time = { path = "../time" }
+units = { path = "../units" }
 regex = { path = "../regex" }
 gpu = { path = "../gpu" }
 web = { path = "../web" }

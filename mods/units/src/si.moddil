@@ -1,0 +1,72 @@
+//! The International System of Units: its seven base dimensions, the dimensions derived from
+//! them, and their common units.
+
+pub dimension Length;
+pub dimension Mass;
+pub dimension Time;
+pub dimension Current;
+pub dimension Temperature;
+pub dimension Amount;
+pub dimension Luminosity;
+
+pub dimension Area = Length ^ 2;
+pub dimension Volume = Length ^ 3;
+pub dimension Velocity = Length / Time;
+pub dimension Acceleration = Length / Time ^ 2;
+pub dimension Force = Mass * Length / Time ^ 2;
+pub dimension Energy = Force * Length;
+pub dimension Power = Energy / Time;
+pub dimension Pressure = Force / Area;
+pub dimension Frequency = Time ^ -1;
+pub dimension Charge = Current * Time;
+pub dimension Voltage = Power / Current;
+
+// Length.
+pub unit m: Length;
+pub unit km = 1000 * m;
+pub unit cm = m / 100;
+pub unit mm = m / 1000;
+pub unit um = m / 1000000;
+pub unit nm = m / 1000000000;
+
+// Mass.
+pub unit kg: Mass;
+pub unit g = kg / 1000;
+pub unit mg = g / 1000;
+pub unit t = 1000 * kg;
+
+// Time.
+pub unit s: Time;
+pub unit ms = s / 1000;
+pub unit us = s / 1000000;
+pub unit ns = s / 1000000000;
+pub unit min = 60 * s;
+pub unit h = 60 * min;
+pub unit day = 24 * h;
+
+// Current, temperature, amount and luminous intensity.
+pub unit A: Current;
+pub unit mA = A / 1000;
+pub unit K: Temperature;
+pub unit degC = K + 273.15;
+pub unit mol: Amount;
+pub unit cd: Luminosity;
+
+// Derived units.
+pub unit Hz = s ^ -1;
+pub unit kHz = 1000 * Hz;
+pub unit MHz = 1000 * kHz;
+pub unit GHz = 1000 * MHz;
+pub unit N = kg * m / s ^ 2;
+pub unit J = N * m;
+pub unit kJ = 1000 * J;
+pub unit W = J / s;
+pub unit kW = 1000 * W;
+pub unit Pa = N / m ^ 2;
+pub unit kPa = 1000 * Pa;
+pub unit bar = 100000 * Pa;
+pub unit C = A * s;
+pub unit V = W / A;
+pub unit mV = V / 1000;
+pub unit L = m ^ 3 / 1000;
+pub unit mL = L / 1000;

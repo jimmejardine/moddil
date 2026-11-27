@@ -348,7 +348,26 @@ app (M).
 **P60. `moddil bench`**, with budgets that fail CI; the HFT hot path's latency is measured that
 way, not checked by the compiler ([`examples/hft-platform.md`](examples/hft-platform.md); L).
 
-**P61. Units** ([`units.md`](units.md); XL).
+**P61. Units, what is left** ([`units.md`](units.md); `crates/sema`, the runners, `mods/units`; M
+each)
+- Quantities of `Simd` (P62): a conversion of one is E0226 until it has built-in arithmetic.
+- Units in wire contracts across tiers (`units.md`: Across tiers), with P65's data contracts:
+  serde writes a quantity as its number today.
+- `Instant - Instant = Duration` in `mods/time`: `Instant` a point of an affine time unit over
+  `i64[ns]`, `Duration` an `i64[ns]`.
+- Exact decimal unit literals for `Fixed` (`101.2550[USD]`, P30): a `Fixed` takes its unit by
+  `with_unit` today.
+- Exchange rates (`Fixed<6>[EUR/USD] * Fixed<4>[USD]`): a `Fixed` `*` across scales, which needs
+  const generic arithmetic; and generic `Mul`/`Div` on quantities whose base is not a number.
+- Unit packs' preludes (`use moddil::units::si::prelude::*`).
+- A compound unit in a turbofish (`value_in::<m/s>()`), and a unit written `1/s` (today `s^-1`).
+- Unit literals in patterns, and impls on quantity types.
+- A dimension bound on a unit parameter (`fn f<U: Length>`).
+- `parse_quantity` of `f32`, the sized integers and `Fixed`; the unit name in plain `{x}`.
+- An imperial pack (`ft = 0.3048 * m`, `lb`, `degF`).
+- The reference interpreter gives a sum the unit a type wants only at a `let`; elsewhere it adds in
+  the finer unit and converts after, which a float may round differently from compiled code.
+- Hashiverse's durations and sizes (`500[ms]`, `64[MiB]`) as quantities.
 
 **P62. `Simd`** ([`performance.md`](performance.md); XL).
 

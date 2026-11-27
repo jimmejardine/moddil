@@ -1,0 +1,22 @@
+//! Currencies: each is a dimension of its own, so amounts of two never add, and converting one
+//! to another takes an exchange rate (`specs/units.md`: Currencies). Those with a minor unit
+//! have it too.
+
+pub dimension Usd;
+pub dimension Eur;
+pub dimension Gbp;
+pub dimension Jpy;
+pub dimension Chf;
+pub dimension Cny;
+
+pub unit USD: Usd;
+pub unit USc = USD / 100;
+pub unit EUR: Eur;
+pub unit EURc = EUR / 100;
+pub unit GBP: Gbp;
+pub unit GBp = GBP / 100;
+pub unit JPY: Jpy;
+pub unit CHF: Chf;
+pub unit CHFc = CHF / 100;
+pub unit CNY: Cny;
+pub unit CNYf = CNY / 100;

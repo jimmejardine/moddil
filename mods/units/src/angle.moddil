@@ -1,0 +1,8 @@
+//! Angles beside the prelude's radian (`rad`, `unit.angle.1`): turns, degrees and their
+//! minutes and seconds. A turn is `2π` radians, to a float's digits; degrees and turns convert
+//! between each other exactly.
+
+pub unit turn = rad * 6.283185307179586;
+pub unit deg = turn / 360;
+pub unit arcmin = deg / 60;
+pub unit arcsec = arcmin / 60;
