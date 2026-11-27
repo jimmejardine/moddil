@@ -41,6 +41,8 @@ pub(crate) struct State {
     pub(crate) baton: Baton,
     /// The task tree each task asked the length of, until it copies it.
     pub(crate) trees: std::collections::HashMap<usize, String>,
+    /// Each task's stack of the allocators installed (`alloc.with.1`, `crate::allocs`).
+    pub(crate) allocs: std::collections::HashMap<usize, Vec<[u64; 2]>>,
     /// The parallel runtime's reactor, for a run of `main`.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) reactor: Option<crate::reactor::Reactor>,
@@ -136,6 +138,7 @@ fn new_ctx() -> Arc<Ctx> {
             aborted: false,
             baton: Baton::default(),
             trees: std::collections::HashMap::new(),
+            allocs: std::collections::HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             reactor: None,
         }),
@@ -625,6 +628,7 @@ pub unsafe extern "C" fn spawn(scope: u64, spec: *const TaskSpec, on: i64) -> u6
         .sched
         .spawn(scope as usize, false, baton::drop_of(spec.drop));
     s.sched.place(t, on, me);
+    crate::allocs::inherit(&mut s, me, t);
     baton::start(&mut s, &c, t, spec_of(spec));
     t as u64
 }
@@ -655,6 +659,7 @@ pub unsafe extern "C" fn scope_run(
         let mut s = c.lock();
         let t = s.sched.spawn(s_id, true, baton::drop_of(spec.drop));
         s.sched.place(t, -1, me);
+        crate::allocs::inherit(&mut s, me, t);
         baton::start(&mut s, &c, t, spec_of(spec));
         s.sched.block(me, Wait::Scope(s_id));
         // The body runs at once, in its owner's turn.

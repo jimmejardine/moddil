@@ -309,6 +309,9 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("install_runtime", &['w', 'w'], None),
     ("parallel", &[], Some('b')),
     ("hash_seed", &[], Some('w')),
+    ("alloc_push", &['w', 'w'], None),
+    ("alloc_pop", &[], None),
+    ("alloc_top", &['p'], None),
     ("park", &['p', 'w', 's', 'b'], Some('b')),
     ("unpark", &['p', 'w'], Some('w')),
     ("stop_requested", &['s', 'b'], Some('b')),
@@ -393,6 +396,10 @@ pub(crate) struct Compiler<'db, M: Module> {
     /// Whether the code may run on several threads at once, and so lowers atomics as atomic
     /// instructions.
     threads: Threads,
+    /// Whether the program installs an allocator (`alloc.with.1`): then a `Buf`'s storage is
+    /// made, grown and freed through the prelude's `__heap_*`, after a header naming its
+    /// allocator; if not, through the runtime directly, as before.
+    uses_alloc: bool,
 }
 
 /// How many threads the compiled code may run on at once (`runtime.md`: Starting a program): a
@@ -892,6 +899,7 @@ pub(crate) fn build<'db, M: Module>(
         place_ids: HashMap::new(),
         lines: lines.then(Vec::new),
         threads,
+        uses_alloc: *moddil_sema::installs_alloc(db, program),
     };
     let mut pending = Vec::new();
     for (k, &item) in entries.iter().enumerate() {
@@ -4013,7 +4021,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         };
         self.emit_call_catching(run, vals, Some(&d), range, catch)?;
         if let Some((p, vt)) = free_after {
-            self.free_dyn(p, vt, None);
+            self.free_dyn(p, vt, None)?;
         }
         self.set_init(dest);
         let b = self.block(target.index())?;
@@ -4745,6 +4753,58 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let s = self.task_call(op, &[]).expect("a seed");
                 self.write(d, Val::Scalar(s))
             }
+            // The allocator in scope (`alloc.with.1`): a `&dyn Alloc` is two words.
+            "alloc_push" => {
+                let Val::Mem(w) = self.operand(&args[0])? else {
+                    return Err("an allocator not as a `&dyn Alloc`".to_string());
+                };
+                let data = self.b.ins().load(types::I64, flags, w, 0);
+                let vt = self.b.ins().load(types::I64, flags, w, 8);
+                self.task_call(op, &[data, vt]);
+                Ok(())
+            }
+            "alloc_pop" => {
+                self.task_call(op, &[]);
+                Ok(())
+            }
+            "alloc_push_none" => {
+                let zero = self.b.ins().iconst(types::I64, 0);
+                self.task_call("alloc_push", &[zero, zero]);
+                Ok(())
+            }
+            "alloc_top" => {
+                let a = self.addr_of(d)?;
+                self.task_call(op, &[a]);
+                Ok(())
+            }
+            "raw_alloc" => {
+                let size = self.value(&args[0])?;
+                let align = self.value(&args[1])?;
+                let p = self.rt_call(self.c.rt.alloc, &[size, align]);
+                self.write(d, Val::Scalar(p))
+            }
+            "raw_free" => {
+                let p = self.value(&args[0])?;
+                let size = self.value(&args[1])?;
+                let align = self.value(&args[2])?;
+                let f = self
+                    .c
+                    .module
+                    .declare_func_in_func(self.c.rt.free, self.b.func);
+                self.b.ins().call(f, &[p, size, align]);
+                Ok(())
+            }
+            "raw_move" => {
+                let dst = self.value(&args[0])?;
+                let src = self.value(&args[1])?;
+                let n = self.value(&args[2])?;
+                let f = self
+                    .c
+                    .module
+                    .declare_func_in_func(self.c.rt.memmove, self.b.func);
+                self.b.ins().call(f, &[dst, src, n]);
+                Ok(())
+            }
             "task_id" => {
                 let t = match self.c.rt.running {
                     Some(data) => {
@@ -5469,18 +5529,14 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                     self.emit_call(Run::Indirect(glue, params, Ty::Unit), vec![p], None, span)?;
                     self.b.ins().jump(join, &[]);
                     self.b.switch_to_block(join);
-                    self.free_dyn(p, vt, Some(cap));
+                    self.free_dyn(p, vt, Some(cap))?;
                 } else {
                     let e = self.layout(&elem)?;
                     let stride = e.size.div_ceil(e.align) * e.align;
                     self.each(p, n, stride, &elem)?;
                     let bytes = self.b.ins().imul_imm_s(cap, i64::from(stride));
                     let align = self.b.ins().iconst(types::I64, i64::from(e.align));
-                    let f = self
-                        .c
-                        .module
-                        .declare_func_in_func(self.c.rt.free, self.b.func);
-                    self.b.ins().call(f, &[p, bytes, align]);
+                    self.heap_free(p, bytes, align)?;
                 }
             }
             // An error set: the member it holds, by its id.
@@ -5516,7 +5572,12 @@ impl<M: Module> Lower<'_, '_, '_, M> {
 
     /// Frees the memory of a `Buf<dyn Trait>` (of `cap` values, or one) at `p`, by its vtable's
     /// size and alignment.
-    fn free_dyn(&mut self, p: ir::Value, vt: ir::Value, cap: Option<ir::Value>) {
+    fn free_dyn(
+        &mut self,
+        p: ir::Value,
+        vt: ir::Value,
+        cap: Option<ir::Value>,
+    ) -> Result<(), String> {
         let flags = ir::MemFlagsData::trusted();
         let size = self.b.ins().load(types::I64, flags, vt, 16);
         let align = self.b.ins().load(types::I64, flags, vt, 24);
@@ -5524,11 +5585,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             Some(c) => self.b.ins().imul(size, c),
             None => size,
         };
-        let f = self
-            .c
-            .module
-            .declare_func_in_func(self.c.rt.free, self.b.func);
-        self.b.ins().call(f, &[p, bytes, align]);
+        self.heap_free(p, bytes, align)
     }
 
     /// Drops each of the `n` values of type `elem` from `base`, `stride` apart, first to last.
@@ -6041,6 +6098,74 @@ impl<M: Module> Lower<'_, '_, '_, M> {
     }
 
     /// Calls the runtime's `f` with `args`: its one result.
+    /// Calls the prelude's function `name` with scalar arguments `args`: its scalar result, if
+    /// it has one.
+    fn prelude_call(
+        &mut self,
+        name: &str,
+        args: &[ir::Value],
+    ) -> Result<Option<ir::Value>, String> {
+        let f = self
+            .c
+            .items
+            .prelude_fn(name)
+            .ok_or_else(|| format!("the prelude's `{name}`"))?;
+        let (id, params, ret) = self.c.declare_fn(f, &[])?;
+        let mut vals = Vec::new();
+        for (a, p) in args.iter().zip(&params) {
+            vals.extend(self.pass_value(Val::Scalar(*a), p)?);
+        }
+        if ret == Ty::Unit {
+            self.emit_call(Run::Direct(id, ret), vals, None, TextRange::default())?;
+            return Ok(None);
+        }
+        let l = self.layout(&ret)?;
+        let w = self.slot(&l);
+        let at = PlaceRef::at(w, ret.clone());
+        self.emit_call(Run::Direct(id, ret), vals, Some(&at), TextRange::default())?;
+        let flags = ir::MemFlagsData::trusted();
+        Ok(Some(self.b.ins().load(types::I64, flags, w, 0)))
+    }
+
+    /// New storage of `size` bytes aligned to `align`, for a `Buf`: from the allocator in scope
+    /// (`alloc.make.1`).
+    fn heap_alloc(&mut self, size: ir::Value, align: ir::Value) -> Result<ir::Value, String> {
+        if self.c.uses_alloc {
+            let p = self.prelude_call("__heap_alloc", &[size, align])?;
+            return p.ok_or_else(|| "`__heap_alloc` without a result".to_string());
+        }
+        Ok(self.rt_call(self.c.rt.alloc, &[size, align]))
+    }
+
+    /// Frees a `Buf`'s storage, to the allocator it came from (`alloc.keep.1`).
+    fn heap_free(&mut self, p: ir::Value, size: ir::Value, align: ir::Value) -> Result<(), String> {
+        if self.c.uses_alloc {
+            self.prelude_call("__heap_free", &[p, size, align])?;
+            return Ok(());
+        }
+        let f = self
+            .c
+            .module
+            .declare_func_in_func(self.c.rt.free, self.b.func);
+        self.b.ins().call(f, &[p, size, align]);
+        Ok(())
+    }
+
+    /// A `Buf`'s storage grown or shrunk, by the allocator it came from (`alloc.keep.1`).
+    fn heap_realloc(
+        &mut self,
+        p: ir::Value,
+        old: ir::Value,
+        new: ir::Value,
+        align: ir::Value,
+    ) -> Result<ir::Value, String> {
+        if self.c.uses_alloc {
+            let q = self.prelude_call("__heap_realloc", &[p, old, new, align])?;
+            return q.ok_or_else(|| "`__heap_realloc` without a result".to_string());
+        }
+        Ok(self.rt_call(self.c.rt.realloc, &[p, old, new, align]))
+    }
+
     fn rt_call(&mut self, f: FuncId, args: &[ir::Value]) -> ir::Value {
         let f = self.c.module.declare_func_in_func(f, self.b.func);
         let call = self.b.ins().call(f, args);
@@ -6663,7 +6788,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             };
             let bytes = self.b.ins().imul_imm_s(n, i64::from(stride));
             let al = self.b.ins().iconst(types::I64, i64::from(align));
-            let p = self.rt_call(self.c.rt.alloc, &[bytes, al]);
+            let p = self.heap_alloc(bytes, al)?;
             if let Some(Val::Mem(src)) = src {
                 let f = self
                     .c
@@ -6699,11 +6824,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             self.b.ins().call(f, &[a, p, bytes]);
             let size = self.b.ins().imul_imm_s(cap, i64::from(stride));
             let al = self.b.ins().iconst(types::I64, i64::from(align));
-            let f = self
-                .c
-                .module
-                .declare_func_in_func(self.c.rt.free, self.b.func);
-            self.b.ins().call(f, &[p, size, al]);
+            self.heap_free(p, size, al)?;
             return Ok(());
         }
         // The others take the `Buf` by borrow.
@@ -6743,7 +6864,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let old = self.b.ins().imul(cap, s);
                 let new = self.b.ins().imul(c, s);
                 let al = self.b.ins().iconst(types::I64, i64::from(align));
-                let q = self.rt_call(self.c.rt.realloc, &[p, old, new, al]);
+                let q = self.heap_realloc(p, old, new, al)?;
                 self.b.ins().store(flags, q, b, 0);
                 self.b.ins().store(flags, c, b, 16);
                 Val::Unit

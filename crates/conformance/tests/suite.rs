@@ -54,6 +54,7 @@ macro_rules! areas {
 }
 
 areas!(
+    alloc,
     arithmetic,
     arrays,
     assert,

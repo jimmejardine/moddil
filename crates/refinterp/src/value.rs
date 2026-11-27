@@ -22,7 +22,7 @@ pub(crate) enum Value {
     /// An array's elements. A slice borrow points to one, or to a `Buf`.
     Array(Vec<Value>),
     /// A `Buf`: its capacity and its elements.
-    Buf(usize, Vec<Value>),
+    Buf(Cap, Vec<Value>),
     /// A struct (whose variant is named like it) or an enum's variant.
     Adt {
         ty: String,
@@ -139,7 +139,7 @@ pub(crate) fn make_string(text: &str) -> Value {
         (
             "Heap",
             vec![Value::Buf(
-                bytes.len(),
+                Cap::new(bytes.len()),
                 bytes.iter().map(|&b| byte(b)).collect(),
             )],
         )
@@ -184,3 +184,27 @@ pub(crate) fn string_text(v: &Value) -> Option<String> {
     };
     String::from_utf8(bytes).ok()
 }
+
+/// A `Buf`'s capacity, and, if it was made where `with Alloc` installed an allocator
+/// (`alloc.with.1`), what that allocator gave for it, as `__free_by` takes it.
+#[derive(Clone, Debug)]
+pub(crate) struct Cap {
+    pub(crate) n: usize,
+    pub(crate) owner: Option<Box<Value>>,
+}
+
+impl Cap {
+    /// A capacity of `n`, from the default allocator.
+    pub(crate) fn new(n: usize) -> Cap {
+        Cap { n, owner: None }
+    }
+}
+
+// Two buffers are alike by their capacity: where they came from is not part of their value.
+impl PartialEq for Cap {
+    fn eq(&self, other: &Cap) -> bool {
+        self.n == other.n
+    }
+}
+
+impl Eq for Cap {}

@@ -370,3 +370,39 @@ impl CMem {
         at
     }
 }
+
+/// `size` bytes aligned to `align` from the host's allocator, for `__raw_alloc`: real memory, so
+/// that an allocator written in Moddil can write to what it is given.
+pub(crate) fn raw_alloc(size: i64, align: i64) -> u64 {
+    let Ok(l) = std::alloc::Layout::from_size_align(
+        usize::try_from(size).unwrap_or(0).max(1),
+        usize::try_from(align).unwrap_or(1).max(1),
+    ) else {
+        return 0;
+    };
+    // SAFETY: the layout's size is not zero.
+    unsafe { std::alloc::alloc(l) as u64 }
+}
+
+/// Gives back what [`raw_alloc`] gave for `size` and `align`.
+pub(crate) fn raw_free(p: u64, size: i64, align: i64) {
+    if p == 0 {
+        return;
+    }
+    if let Ok(l) = std::alloc::Layout::from_size_align(
+        usize::try_from(size).unwrap_or(0).max(1),
+        usize::try_from(align).unwrap_or(1).max(1),
+    ) {
+        // SAFETY: `p` came from `raw_alloc` with this size and alignment.
+        unsafe { std::alloc::dealloc(p as *mut u8, l) }
+    }
+}
+
+/// Copies `n` bytes from `src` to `dst`, real memory that may overlap.
+pub(crate) fn raw_move(dst: u64, src: u64, n: i64) {
+    let n = usize::try_from(n).unwrap_or(0);
+    if n > 0 {
+        // SAFETY: the caller gives memory with room for `n` bytes at both.
+        unsafe { std::ptr::copy(src as *const u8, dst as *mut u8, n) }
+    }
+}

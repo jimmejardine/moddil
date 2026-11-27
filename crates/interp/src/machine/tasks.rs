@@ -134,6 +134,9 @@ impl Machine<'_> {
         range: TextRange,
     ) -> Option<Stop> {
         let me = self.stack.current();
+        if let Some(v) = self.alloc_op(name, values) {
+            return self.deliver(ret, Ok(v));
+        }
         let pending = match name {
             "task_id" => return self.deliver(ret, Ok(Value::Int(me as i64))),
             // The interpreter runs one task at a time: a parallel runtime's tasks run in one of
@@ -470,7 +473,9 @@ impl Machine<'_> {
             c.args.to_vec(),
             Ret::Task,
         );
-        self.stack.add_task(frame)
+        let t = self.stack.add_task(frame);
+        self.inherit_alloc(t);
+        t
     }
 
     /// Tries operation `p` for the running task: it is done, the task waits, or (cancelled) it
@@ -653,7 +658,7 @@ impl Machine<'_> {
     /// closure has unwound, and the task ends, cancelled.
     pub(super) fn resume(&mut self) -> Option<Stop> {
         match self.stack.pop() {
-            Ret::To(..) => {
+            Ret::To(..) | Ret::Buf(..) => {
                 self.stack.unwind_top(true);
                 None
             }

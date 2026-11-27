@@ -1,0 +1,141 @@
+// Part of the prelude (`../prelude.md`): the allocator in scope (`alloc.with.1`). `with Alloc =
+// a { … }` makes what is allocated in the block come from `a`: a `Buf`'s storage, so a `Vec`'s,
+// a `String`'s, a `Box`'s and an `Rc`'s. A buffer keeps the allocator it was made with: growing
+// it and freeing it go back to that one (`alloc.keep.1`).
+
+// Where memory comes from (`alloc.trait.1`). `alloc` gives `size` bytes aligned to `align`, or
+// fails; `free` takes back what `alloc` gave, with the same size and alignment.
+trait Alloc {
+    fn alloc(&self, size: int, align: int) -> *mut u8 with fail(OutOfMemory);
+    fn free(&self, p: *mut u8, size: int, align: int);
+}
+
+// An allocator with no room left (`alloc.oom.1`).
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct OutOfMemory;
+
+// The default allocator (`alloc.system.1`): what allocates where no `with Alloc` is installed,
+// and what an allocator of its own may take its blocks from.
+struct System;
+
+impl Alloc for System {
+    fn alloc(&self, size: int, align: int) -> *mut u8 with fail(OutOfMemory) {
+        __raw_alloc(size, align)
+    }
+
+    fn free(&self, p: *mut u8, size: int, align: int) {
+        __raw_free(p, size, align)
+    }
+}
+
+// The allocator stack of the running task: `with Alloc = a` pushes `a` before its block and pops
+// it after, however the block is left.
+#[intrinsic]
+fn __alloc_push(a: &dyn Alloc);
+
+// Pushes the default allocator: while an allocator's own `alloc` or `free` runs, what it
+// allocates comes from the default (`alloc.self.1`).
+#[intrinsic]
+fn __alloc_push_none();
+
+#[intrinsic]
+fn __alloc_pop();
+
+// The innermost allocator installed, if any.
+#[intrinsic]
+fn __alloc_top() -> Option<&dyn Alloc>;
+
+// The default allocator itself, without a header.
+#[intrinsic]
+fn __raw_alloc(size: int, align: int) -> *mut u8;
+
+#[intrinsic]
+fn __raw_free(p: *mut u8, size: int, align: int);
+
+// Copies `n` bytes from `src` to `dst`, which may overlap.
+#[intrinsic]
+fn __raw_move(dst: *mut u8, src: *const u8, n: int);
+
+// In a program that installs an allocator, each allocation is preceded by a header: its last 16
+// bytes name the allocator it came from, `None` for the default (`alloc.keep.1`). The header is
+// as large as the alignment, and at least 16 bytes.
+fn __header(align: int) -> int {
+    if align > 16 { align } else { 16 }
+}
+
+// Where an allocation's allocator is named, before its first byte `p`.
+fn __owner_of(p: *mut u8) -> *mut Option<&dyn Alloc> {
+    core::ptr::cast_mut_to::<u8, Option<&dyn Alloc>>(core::ptr::add_mut(p, -16))
+}
+
+// `size` bytes aligned to `align` from allocator `a`, with the default in scope while it runs
+// (`alloc.self.1`). An allocator with no room left traps (`alloc.oom.1`).
+fn __alloc_by(a: &dyn Alloc, size: int, align: int) -> *mut u8 {
+    __alloc_push_none();
+    let p = a.alloc(size, align) ?! "the allocator has room";
+    __alloc_pop();
+    p
+}
+
+// Gives back to `r`'s allocator its allocation: the allocator, the allocation, its size and its
+// alignment.
+fn __free_by(r: (&dyn Alloc, *mut u8, int, int)) {
+    let (a, p, size, align) = r;
+    __alloc_push_none();
+    a.free(p, size, align);
+    __alloc_pop();
+}
+
+// `r`'s allocation replaced by one of `size` bytes from the same allocator (`alloc.keep.1`).
+// The interpreters keep values, not bytes: they call it to count, and copy nothing.
+fn __realloc_by(r: (&dyn Alloc, *mut u8, int, int), size: int) -> *mut u8 {
+    let (a, _, _, align) = r;
+    let q = __alloc_by(a, size, align);
+    __free_by(r);
+    q
+}
+
+// `size` bytes aligned to `align` from `owner` (the default if `None`), after a header naming
+// it.
+fn __alloc_from(owner: Option<&dyn Alloc>, size: int, align: int) -> *mut u8 {
+    let h = __header(align);
+    let base = match owner {
+        Some(a) => __alloc_by(a, size + h, h),
+        None    => __raw_alloc(size + h, h),
+    };
+    let p = core::ptr::add_mut(base, h);
+    unsafe("p is after a header of at least 16 bytes this function was given") {
+        *__owner_of(p) = owner;
+    }
+    p
+}
+
+// A new allocation: from the allocator in scope (`alloc.make.1`).
+fn __heap_alloc(size: int, align: int) -> *mut u8 {
+    __alloc_from(__alloc_top(), size, align)
+}
+
+// Frees what `__heap_alloc` or `__heap_realloc` gave, to the allocator it came from.
+fn __heap_free(p: *mut u8, size: int, align: int) {
+    let h = __header(align);
+    let owner = unsafe("p came with a header") {
+        *__owner_of(p)
+    };
+    let base = core::ptr::add_mut(p, -h);
+    match owner {
+        Some(a) => __free_by((a, base, size + h, h)),
+        None    => __raw_free(base, size + h, h),
+    }
+}
+
+// The allocation `p` of `old` bytes made `new` bytes, from the allocator it came from
+// (`alloc.keep.1`): its first bytes kept.
+fn __heap_realloc(p: *mut u8, old: int, new: int, align: int) -> *mut u8 {
+    let owner = unsafe("p came with a header") {
+        *__owner_of(p)
+    };
+    let q = __alloc_from(owner, new, align);
+    __raw_move(q, p, if old < new { old } else { new });
+    __heap_free(p, old, align);
+    q
+}

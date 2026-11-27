@@ -476,12 +476,29 @@ impl Builder<'_> {
                 }
                 ScopeItem::ErrDefer(body) if error => self.run_errdefer(body),
                 ScopeItem::ErrDefer(_) => {}
+                ScopeItem::AllocPop => self.alloc_pop(),
             }
         }
     }
 
     fn ty(&self, e: ExprId) -> Ty {
         self.types.expr(e)
+    }
+
+    /// Pops the innermost allocator off the task's allocator stack (`alloc.with.1`).
+    fn alloc_pop(&mut self) {
+        let unit = self.temp(Ty::Unit);
+        let callee = Callee::Fn {
+            func: self.prelude_fn("__alloc_pop"),
+            args: Vec::new(),
+        };
+        self.call_into(
+            None,
+            callee,
+            Place::local(unit),
+            Vec::new(),
+            TextRange::default(),
+        );
     }
 
     fn range(&self, e: ExprId) -> TextRange {
@@ -682,6 +699,7 @@ impl Builder<'_> {
                     self.eval_into(t, body);
                 }
                 ScopeItem::ErrDefer(body) => self.run_errdefer(body),
+                ScopeItem::AllocPop => self.alloc_pop(),
             }
             self.scopes.end_base();
             // Parents come before their children, so the parent's block is known.

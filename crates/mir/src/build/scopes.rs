@@ -19,6 +19,9 @@ pub(super) enum ScopeItem {
     Defer(ExprId),
     /// An `errdefer` block, which runs only when the scope is left with an error.
     ErrDefer(ExprId),
+    /// A `with Alloc` block's allocator, which is popped off the task's allocator stack
+    /// however the block is left (`alloc.with.1`).
+    AllocPop,
 }
 
 /// An enclosing loop while its body is built.

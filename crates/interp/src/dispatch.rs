@@ -128,10 +128,23 @@ impl<'a> Dispatch<'a> {
                     self.glue(x, t, true, out);
                 }
             }
-            // Elements are dropped first to last.
-            (Value::Array(xs) | Value::Buf(_, xs), Ty::Array(t, _) | Ty::Buf(t)) => {
+            // Elements are dropped first to last; then a buffer's storage goes back to the
+            // allocator it came from (`alloc.keep.1`).
+            (Value::Array(xs), Ty::Array(t, _) | Ty::Buf(t)) => {
                 for x in xs {
                     self.glue(x, t, true, out);
+                }
+            }
+            (Value::Buf(cap, xs), Ty::Array(t, _) | Ty::Buf(t)) => {
+                for x in xs {
+                    self.glue(x, t, true, out);
+                }
+                if let Some(r) = cap.owner {
+                    let free = self
+                        .items
+                        .prelude_fn("__free_by")
+                        .expect("the prelude's `__free_by`");
+                    out.push((free, Vec::new(), *r));
                 }
             }
             (Value::Closure(xs), Ty::Closure(c)) => {

@@ -85,14 +85,14 @@ impl Machine<'_> {
         let vec = Value::Adt {
             ty: "Vec".to_string(),
             variant: "Vec".to_string(),
-            fields: vec![Value::Buf(params.len(), params)],
+            fields: vec![Value::Buf(crate::value::Cap::new(params.len()), params)],
         };
         let texts = |xs: &[String]| {
             let xs: Vec<Value> = xs.iter().map(|x| string(x)).collect();
             Value::Adt {
                 ty: "Vec".to_string(),
                 variant: "Vec".to_string(),
-                fields: vec![Value::Buf(xs.len(), xs)],
+                fields: vec![Value::Buf(crate::value::Cap::new(xs.len()), xs)],
             }
         };
         let info = Value::Adt {

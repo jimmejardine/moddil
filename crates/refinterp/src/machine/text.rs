@@ -789,7 +789,10 @@ impl Machine<'_> {
                 Value::Adt {
                     ty: "Box".to_string(),
                     variant: "Box".to_string(),
-                    fields: vec![Value::Buf(1, vec![self.memory.free(&p)])],
+                    fields: vec![Value::Buf(
+                        crate::value::Cap::new(1),
+                        vec![self.memory.free(&p)],
+                    )],
                 }
             }
             // Compile-time code's error, reached when the program runs (`comptime.error.1`).
@@ -898,21 +901,21 @@ impl Machine<'_> {
         let full = || crate::trap(crate::TrapClass::CapacityExceeded, range);
         match name {
             "with_capacity" => {
-                return Ok(Value::Buf(
-                    usize::try_from(int(&args[0])).unwrap_or(0),
-                    Vec::new(),
-                ));
+                let cap = self.buf_cap(usize::try_from(int(&args[0])).unwrap_or(0), range)?;
+                return Ok(Value::Buf(cap, Vec::new()));
             }
             "from_array" => {
                 let Value::Array(xs) = args[0].clone() else {
                     unreachable!("an array")
                 };
-                return Ok(Value::Buf(xs.len(), xs));
+                let cap = self.buf_cap(xs.len(), range)?;
+                return Ok(Value::Buf(cap, xs));
             }
             "into_array" => {
-                let Value::Buf(_, xs) = args[0].clone() else {
+                let Value::Buf(cap, xs) = args[0].clone() else {
                     unreachable!("a `Buf`")
                 };
+                self.buf_free(cap, range)?;
                 return Ok(Value::Array(xs));
             }
             "as_slice" => return Ok(Value::Ref(place(self, &args[0]), false)),
@@ -926,12 +929,13 @@ impl Machine<'_> {
         let at = |i: &Value, len: usize| usize::try_from(int(i)).ok().filter(|&i| i < len);
         let out = match name {
             "len" => Value::Int(xs.len() as i64),
-            "capacity" => Value::Int(cap as i64),
+            "capacity" => Value::Int(cap.n as i64),
             "set_capacity" => {
-                cap = usize::try_from(int(&args[1])).unwrap_or(0).max(xs.len());
+                let n = usize::try_from(int(&args[1])).unwrap_or(0).max(xs.len());
+                cap = self.buf_recap(cap, n, range)?;
                 Value::Unit
             }
-            "push" | "insert" if xs.len() >= cap => return Err(full()),
+            "push" | "insert" if xs.len() >= cap.n => return Err(full()),
             "push" => {
                 xs.push(args[1].clone());
                 Value::Unit

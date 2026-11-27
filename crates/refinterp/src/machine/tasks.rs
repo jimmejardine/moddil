@@ -465,6 +465,11 @@ impl Machine<'_> {
         };
         let owner = owner.as_str();
         let id = |m: &Self, v: &Value| id_of(&m.target(v.clone()));
+        if owner.is_empty()
+            && let Some(v) = self.alloc_intrinsic(name, args)
+        {
+            return Some(Ok(v));
+        }
         Some(match (owner, name) {
             ("", "__task_id") => Ok(Value::Int(self.memory.task() as i64)),
             ("", "__parallel") => Ok(Value::Bool(false)),
@@ -935,7 +940,7 @@ fn handle(name: &str, i: usize) -> Value {
     }
 }
 
-fn option(v: Option<Value>) -> Value {
+pub(super) fn option(v: Option<Value>) -> Value {
     match v {
         Some(v) => Value::Adt {
             ty: "Option".to_string(),

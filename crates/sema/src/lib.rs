@@ -186,6 +186,23 @@ pub fn owners(db: &dyn Db, program: Program) -> Vec<Owner<'_>> {
         .collect()
 }
 
+/// Whether the program installs an allocator anywhere (`with Alloc = …`, `alloc.with.1`): if it
+/// does, each allocation carries a header naming the allocator it came from, so it goes back
+/// to that one (`alloc.keep.1`); if not, allocations are made as without allocators.
+#[salsa::tracked]
+pub fn installs_alloc(db: &dyn Db, program: Program) -> bool {
+    let items = item_tree(db, program);
+    let Some(alloc) = items.lang("Alloc") else {
+        return false;
+    };
+    owners(db, program).into_iter().any(|o| {
+        body(db, o).body.exprs.iter().any(|(_, x)| {
+            matches!(&x.kind, hir::ExprKind::With { handlers, .. }
+                if handlers.iter().any(|h| matches!(&h.effect, Ty::Dyn(t, _) if t.trait_ == alloc)))
+        })
+    })
+}
+
 /// This crate's version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

@@ -14,6 +14,7 @@ use crate::program::{Method, Program};
 use crate::value::{Head, Pointer, Value};
 use crate::{Eval, Flow, TestRun};
 
+mod allocs;
 mod blocks;
 mod calls;
 mod closures;
@@ -697,9 +698,9 @@ impl Machine<'_> {
             Value::Adt { ty, fields, .. } => {
                 self.has_destructor(ty) || fields.iter().any(|f| self.needs_drop(f))
             }
-            Value::Tuple(xs) | Value::Array(xs) | Value::Buf(_, xs) => {
-                xs.iter().any(|x| self.needs_drop(x))
-            }
+            Value::Tuple(xs) | Value::Array(xs) => xs.iter().any(|x| self.needs_drop(x)),
+            // A buffer from an allocator goes back to it (`alloc.keep.1`).
+            Value::Buf(cap, xs) => cap.owner.is_some() || xs.iter().any(|x| self.needs_drop(x)),
             _ => false,
         }
     }
@@ -730,12 +731,19 @@ impl Machine<'_> {
                 }
                 Ok(())
             }
-            // Elements are dropped first to last.
-            Value::Array(xs) | Value::Buf(_, xs) => {
+            // Elements are dropped first to last; then a buffer's storage goes back to the
+            // allocator it came from (`alloc.keep.1`).
+            Value::Array(xs) => {
                 for x in xs {
                     self.drop_value(x, true, range)?;
                 }
                 Ok(())
+            }
+            Value::Buf(cap, xs) => {
+                for x in xs {
+                    self.drop_value(x, true, range)?;
+                }
+                self.buf_free(cap, range)
             }
             _ => Ok(()),
         }

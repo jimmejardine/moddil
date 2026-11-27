@@ -1007,6 +1007,19 @@ impl Builder<'_> {
                 let rt = Operand::Copy(Place::local(installed));
                 self.call_into(None, callee, Place::local(unit), vec![rt], h.range);
             }
+            // An allocator, in scope for the block (`alloc.with.1`): pushed now, and popped
+            // however the block is left.
+            if matches!(&h.effect, Ty::Dyn(tr, _) if Some(tr.trait_) == self.items.lang("Alloc")) {
+                let unit = self.temp(Ty::Unit);
+                let callee = Callee::Fn {
+                    func: self.prelude_fn("__alloc_push"),
+                    args: Vec::new(),
+                };
+                let a = Operand::Copy(Place::local(installed));
+                self.call_into(None, callee, Place::local(unit), vec![a], h.range);
+                self.scopes.push(ScopeItem::AllocPop);
+                self.cfg.node = self.scopes.node();
+            }
             self.installed.insert((e, k), Place::local(installed));
         }
         self.eval_into(dest, body);

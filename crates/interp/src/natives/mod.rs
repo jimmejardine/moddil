@@ -135,7 +135,7 @@ impl<'a> Natives<'a> {
                 Value::Adt {
                     adt: self.prelude_adt("Box"),
                     variant: 0,
-                    fields: vec![Value::Buf(1, vec![v])],
+                    fields: vec![Value::Buf(crate::value::Cap::new(1), vec![v])],
                 }
             }
             (Ty::Unit, "replace") => {

@@ -37,8 +37,12 @@ struct Machine<'a> {
     /// The task tree `os::task_tree_len` kept, until `os::task_tree_copy` (one task runs at a
     /// time).
     tree: Option<String>,
+    /// Each task's stack of the allocators installed (`alloc.with.1`), innermost last: `None`
+    /// for the default.
+    allocs: std::collections::HashMap<usize, Vec<Option<Value>>>,
 }
 
+mod allocs;
 mod ffi;
 mod tasks;
 
@@ -104,6 +108,7 @@ pub(crate) fn run_seeded(
         raw_result: false,
         hash_seed,
         tree: None,
+        allocs: std::collections::HashMap::new(),
     };
     m.run_to_end(observer)
 }
@@ -135,6 +140,7 @@ pub(crate) fn run_frozen(
         raw_result: true,
         hash_seed: Some(0),
         tree: None,
+        allocs: std::collections::HashMap::new(),
     };
     let v = m.run_to_end(&mut |_, _, _| {})?;
     Ok(crate::frozen::freeze(&m.stack, &v))
@@ -297,6 +303,10 @@ impl<'a> Machine<'a> {
                         self.stack.store(&dest, value);
                         self.stack.goto(target);
                     }
+                    Ret::Buf(at, target, owner, size) => {
+                        self.buf_allocated(&at, *owner, size, value);
+                        self.stack.goto(target);
+                    }
                     Ret::Task => {
                         self.sched.end(self.stack.current(), Outcome::Value(value));
                         return self.switch_next().map(Err);
@@ -406,6 +416,7 @@ impl<'a> Machine<'a> {
                     return self.task_call(name, &[], &values, ret, range);
                 }
                 match self.natives.call(f, &values, &type_args, &mut self.stack) {
+                    Ok(v) if self.buf_allocs(f, &values, &v, dest, target) => return None,
                     Ok(v) => v,
                     Err(class) => {
                         return Some(Stop::Trap(self.trap(class, Some(range), Vec::new())));

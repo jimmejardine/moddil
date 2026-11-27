@@ -22,8 +22,8 @@ pub enum Value {
     Tuple(Vec<Value>),
     /// An array's elements, in order. A slice borrow points to one, or to a `Buf`.
     Array(Vec<Value>),
-    /// A `Buf`: its capacity, and the elements it holds.
-    Buf(usize, Vec<Value>),
+    /// A `Buf`: its capacity (and the allocator it came from), and the elements it holds.
+    Buf(Cap, Vec<Value>),
     /// A struct (variant 0) or an enum's variant, with its fields in order.
     Adt {
         /// The struct or enum, by its index in the file's item tree.
@@ -54,6 +54,38 @@ pub enum Value {
     /// A Moddil function as a C function pointer (`type.fnptr.1`): it crosses to C as a
     /// callback.
     FnPtr(u32),
+}
+
+/// A `Buf`'s capacity, and, if it was made where `with Alloc` installed an allocator
+/// (`alloc.with.1`), what that allocator gave for it: the allocator, the allocation, its size and
+/// its alignment, as `__free_by` takes them. The interpreter keeps values, not bytes: it calls
+/// the allocator so that it counts what is made and freed, and the elements stay here.
+#[derive(Clone, Debug)]
+pub struct Cap {
+    pub(crate) n: usize,
+    pub(crate) owner: Option<Box<Value>>,
+}
+
+impl Cap {
+    /// A capacity of `n`, from the default allocator.
+    pub(crate) fn new(n: usize) -> Cap {
+        Cap { n, owner: None }
+    }
+}
+
+// Two buffers are alike by their capacity: where they came from is not part of their value.
+impl PartialEq for Cap {
+    fn eq(&self, other: &Cap) -> bool {
+        self.n == other.n
+    }
+}
+
+impl Eq for Cap {}
+
+impl std::hash::Hash for Cap {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        self.n.hash(h);
+    }
 }
 
 /// Where a borrow points: a local of a frame of a task, and a path of field indices into it.
@@ -206,7 +238,7 @@ pub(crate) fn make_string(items: &ItemTree, text: &str) -> Value {
             adt: prelude_adt(items, "StringRepr"),
             variant: 1,
             fields: vec![Value::Buf(
-                bytes.len(),
+                Cap::new(bytes.len()),
                 bytes.iter().map(|&b| byte(b)).collect(),
             )],
         }

@@ -1,0 +1,175 @@
+// covers: alloc.trait.1, alloc.with.1, alloc.make.1, alloc.keep.1, alloc.task.1, alloc.self.1, alloc.system.1, alloc.oom.1
+
+use core::atomic::{self, Ordering};
+use core::cell::UnsafeCell;
+
+/// An allocator that counts what it gives and takes back, taking its memory from the default.
+struct Counting {
+    allocs: UnsafeCell<int>,
+    frees: UnsafeCell<int>,
+}
+
+impl Counting {
+    fn new() -> Counting {
+        Counting { allocs: UnsafeCell::new(0), frees: UnsafeCell::new(0) }
+    }
+
+    /// What it has given, and what it has taken back.
+    fn counts(&self) -> (int, int) {
+        (atomic::load(self.allocs.get(), Ordering::SeqCst), atomic::load(self.frees.get(), Ordering::SeqCst))
+    }
+}
+
+impl Alloc for Counting {
+    fn alloc(&self, size: int, align: int) -> *mut u8 with fail(OutOfMemory) {
+        atomic::fetch_add(self.allocs.get(), 1, Ordering::SeqCst);
+        System.alloc(size, align)?
+    }
+
+    fn free(&self, p: *mut u8, size: int, align: int) {
+        atomic::fetch_add(self.frees.get(), 1, Ordering::SeqCst);
+        System.free(p, size, align)
+    }
+}
+
+/// An allocator that keeps a log of its calls in a `Vec`: the log's own storage comes from the
+/// default allocator, not from itself.
+struct Logging {
+    log: UnsafeCell<Vec<int>>,
+}
+
+impl Alloc for Logging {
+    fn alloc(&self, size: int, align: int) -> *mut u8 with fail(OutOfMemory) {
+        unsafe("one task runs at a time, and the log is not borrowed elsewhere") {
+            (*self.log.get()).push(1);
+        }
+        System.alloc(size, align)?
+    }
+
+    fn free(&self, p: *mut u8, size: int, align: int) {
+        unsafe("one task runs at a time, and the log is not borrowed elsewhere") {
+            (*self.log.get()).push(0);
+        }
+        System.free(p, size, align)
+    }
+}
+
+test "what a block makes comes from the allocator it installs" {
+    let c = Counting::new();
+    with Alloc = &c {
+        let mut v: Vec<int> = Vec::new();
+        v.push(1);
+        v.push(2);
+        v.len()
+    }  // => 2
+    ;
+    c.counts()  // => (3, 3)
+}
+
+test "a buffer made outside keeps the allocator it was made with" {
+    let c = Counting::new();
+    let mut v: Vec<int> = Vec::new();
+    with Alloc = &c {
+        v.push(1);
+        v.push(2);
+        v.push(3);
+    }
+    v.len()  // => 3
+    ;
+    c.counts()  // => (0, 0)
+}
+
+test "the innermost allocator is the one in scope" {
+    let outer = Counting::new();
+    let inner = Counting::new();
+    with Alloc = &outer {
+        with Alloc = &inner {
+            let s = "made in the inner block, and long enough for the heap".to_string();
+            s.len()
+        }
+    }  // => 53
+    ;
+    outer.counts()  // => (0, 0)
+    ;
+    let (allocs, frees) = inner.counts();
+    allocs > 0 && allocs == frees  // => true
+}
+
+/// What `fails_inside` fails with.
+struct Oops;
+
+fn fails_inside(c: &Counting) -> int with fail(Oops) {
+    with Alloc = c {
+        fail(Oops);
+    }
+}
+
+test "leaving the block with an error uninstalls its allocator" {
+    let c = Counting::new();
+    let r = try { fails_inside(&c)? };
+    r.is_err()  // => true
+    ;
+    let v: Vec<int> = [1, 2, 3];
+    v.len()  // => 3
+    ;
+    c.counts()  // => (0, 0)
+}
+
+test "leaving the block by `break` uninstalls its allocator" {
+    let c = Counting::new();
+    loop {
+        with Alloc = &c {
+            break;
+        }
+    }
+    let v: Vec<int> = [1, 2, 3];
+    v.len()  // => 3
+    ;
+    c.counts()  // => (0, 0)
+}
+
+test "a task started in the block allocates from its allocator" {
+    let c = Counting::new();
+    with Alloc = &c {
+        scope(|s| {
+            let t = s.spawn (|| {
+                let v: Vec<int> = [1, 2, 3];
+                v.len()
+            });
+            t.join()
+        })
+    }  // => 3
+    ;
+    let (allocs, frees) = c.counts();
+    allocs > 0 && allocs == frees  // => true
+}
+
+test "an allocator's own allocations come from the default allocator" {
+    let l = Logging { log: UnsafeCell::new(Vec::new()) };
+    with Alloc = &l {
+        let v: Vec<int> = [1, 2];
+        v.len()
+    }  // => 2
+    ;
+    unsafe("the block is over") {
+        (*l.log.get()).len()
+    }  // => 2
+}
+
+/// An allocator with no room at all.
+struct Full;
+
+impl Alloc for Full {
+    fn alloc(&self, size: int, align: int) -> *mut u8 with fail(OutOfMemory) {
+        fail(OutOfMemory);
+    }
+
+    fn free(&self, p: *mut u8, size: int, align: int) {}
+}
+
+test "an allocator with no room left traps" {
+    with Alloc = Full {
+        let v: Vec<int> = Vec::with_capacity(4);  //~ trap
+        v.len()
+    };
+}

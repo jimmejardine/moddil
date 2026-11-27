@@ -21,6 +21,10 @@ pub(crate) enum Ret {
     Task,
     /// Back to C: the call is a callback C made while a C call ran (`ffi.native.2`).
     Callback,
+    /// To a buffer made or regrown where an allocator is installed (`alloc.with.1`): the
+    /// buffer's place, where the caller continues, and the allocator and size the allocation
+    /// it is given came from.
+    Buf(Pointer, usize, Box<Value>, i64),
 }
 
 /// A destructor call waiting to run: the function, its type arguments, and the value.

@@ -46,7 +46,7 @@ Each page lists its diagnostics by code; the codes are in [Diagnostics](diagnost
 - [Statements](statements.md)
 - [Patterns](patterns.md)
 - [Ownership](ownership.md), [Borrows](borrows.md), [Views](views.md),
-  [Shared values: `Rc` and `Weak`](rc.md)
+  [Shared values: `Rc` and `Weak`](rc.md), [The allocator in scope](alloc.md)
 - [Iteration and collections](collections.md) ([core source](core/collections.moddil))
 - [Errors](errors.md), [Effects](effects.md), [Contracts](contracts.md),
   [Concurrency](concurrency.md), [Unsafe code](unsafe.md), [The operating system](os.md),

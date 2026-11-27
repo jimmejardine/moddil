@@ -21,6 +21,7 @@ behaviour are as written there. The files are one source, joined in this order:
 | [`program.moddil`](prelude/program.moddil) | `ExitCode`, `Log`, `RefinementError` and `Refined`, `FnInfo` and `ParamInfo`, `compile_error`, `TagFields` |
 | [`concurrency.moddil`](prelude/concurrency.moddil) | scopes and tasks, channels, `Duration` and timers |
 | [`derives.moddil`](prelude/derives.moddil) | the templates `#[derive]` instantiates for `Clone`, `PartialEq`, `PartialOrd`, `Ord`, `Hash`, `Debug` and `Default` (**attr.derive.1**) |
+| [`alloc.moddil`](prelude/alloc.moddil) | `Alloc`, `OutOfMemory` and `System`, and how storage is made from the allocator in scope ([The allocator in scope](alloc.md)) |
 
 **prelude.1** The prelude holds `assert` ([`assert`](expressions/assert.md)), `unreachable` and
 `todo` ([`unreachable` and `todo`](expressions/unreachable.md)) and `discard` ([Errors](errors.md)), the types `Option`, `Result` and `Ordering`, the traits `Clone`, `Copy`,

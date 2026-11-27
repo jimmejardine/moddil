@@ -16,6 +16,7 @@
 //!
 //! What they record is kept per run, shared by its threads, until the host [`take`]s it.
 
+mod allocs;
 mod baton;
 #[cfg(not(target_arch = "wasm32"))]
 mod executors;
@@ -447,6 +448,9 @@ pub fn symbols() -> Vec<(&'static str, *const u8)> {
         ("moddil_rt_executor_new", run::executor_new as *const u8),
         ("moddil_rt_parallel", run::parallel as *const u8),
         ("moddil_rt_hash_seed", hash::hash_seed as *const u8),
+        ("moddil_rt_alloc_push", allocs::alloc_push as *const u8),
+        ("moddil_rt_alloc_pop", allocs::alloc_pop as *const u8),
+        ("moddil_rt_alloc_top", allocs::alloc_top as *const u8),
         ("moddil_rt_park", park as *const u8),
         ("moddil_rt_safe_point", run::safe_point as *const u8),
         (

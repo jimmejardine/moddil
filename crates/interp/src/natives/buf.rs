@@ -4,7 +4,7 @@ use moddil_mir::TrapClass;
 
 use super::{Natives, pointer};
 use crate::stack::Stack;
-use crate::value::Value;
+use crate::value::{Cap, Value};
 
 impl Natives<'_> {
     pub(super) fn buf(
@@ -18,11 +18,12 @@ impl Natives<'_> {
             other => unreachable!("a `Buf`: {other:?}"),
         };
         Ok(match name {
-            "with_capacity" => {
-                Value::Buf(usize::try_from(args[0].as_int()).unwrap_or(0), Vec::new())
-            }
+            "with_capacity" => Value::Buf(
+                Cap::new(usize::try_from(args[0].as_int()).unwrap_or(0)),
+                Vec::new(),
+            ),
             "from_array" => match args[0].clone() {
-                Value::Array(xs) => Value::Buf(xs.len(), xs),
+                Value::Array(xs) => Value::Buf(Cap::new(xs.len()), xs),
                 other => unreachable!("an array: {other:?}"),
             },
             // The buffer, given up, holds its array's elements (`repeat_array`).
@@ -31,7 +32,7 @@ impl Natives<'_> {
                 other => unreachable!("a `Buf`: {other:?}"),
             },
             "len" => Value::Int(load(stack, &args[0]).1.len() as i64),
-            "capacity" => Value::Int(load(stack, &args[0]).0 as i64),
+            "capacity" => Value::Int(load(stack, &args[0]).0.n as i64),
             "as_slice" => Value::Ref(pointer(&args[0]), false),
             "as_mut_slice" => Value::Ref(pointer(&args[0]), true),
             _ => {
@@ -40,10 +41,10 @@ impl Natives<'_> {
                     |i: &Value, len: usize| usize::try_from(i.as_int()).ok().filter(|&i| i < len);
                 let out = match name {
                     "set_capacity" => {
-                        cap = usize::try_from(args[1].as_int()).unwrap_or(0).max(xs.len());
+                        cap.n = usize::try_from(args[1].as_int()).unwrap_or(0).max(xs.len());
                         Value::Unit
                     }
-                    "push" | "insert" if xs.len() >= cap => {
+                    "push" | "insert" if xs.len() >= cap.n => {
                         return Err(TrapClass::CapacityExceeded);
                     }
                     "push" => {

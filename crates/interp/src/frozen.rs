@@ -174,7 +174,7 @@ fn thawed(slots: &[Pointer], v: &Frozen) -> Value {
         Frozen::Str(s) => Value::Str(s.clone()),
         Frozen::Tuple(xs) => Value::Tuple(all(xs)),
         Frozen::Array(xs) => Value::Array(all(xs)),
-        Frozen::Buf(xs) => Value::Buf(xs.len(), all(xs)),
+        Frozen::Buf(xs) => Value::Buf(crate::value::Cap::new(xs.len()), all(xs)),
         Frozen::Adt {
             adt,
             variant,
