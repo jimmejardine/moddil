@@ -1048,6 +1048,18 @@ fn effect_clause(
             )),
             _ => {}
         }
+        // The allocator in scope is ambient: no signature names it (`alloc.ambient.1`).
+        if let Ty::Dyn(tr, _) = &ty
+            && Some(tr.trait_) == scope.tree.lang("Alloc")
+        {
+            ds.push(Diagnostic::error(
+                Code::E0612,
+                effect.text_range(),
+                "the allocator in scope is not named in a signature: what a function allocates \
+                 comes from whichever one its caller installs",
+            ));
+            continue;
+        }
         effects.push(EffectSig {
             ty,
             name,

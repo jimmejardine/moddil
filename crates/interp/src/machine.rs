@@ -253,7 +253,7 @@ impl<'a> Machine<'a> {
                 let v = self.stack.shown(self.stack.operand(value));
                 observer(self.stack.body().src.file().unwrap_or(0), *range, v);
             }
-            Statement::Read(_) | Statement::StorageDead(_) => {}
+            Statement::Read(_) | Statement::StorageDead(_) | Statement::AllocTaint { .. } => {}
         }
         None
     }

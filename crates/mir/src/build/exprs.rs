@@ -974,6 +974,7 @@ impl Builder<'_> {
     /// installed handler is a borrow (as `dyn`, for a trait).
     fn with_into(&mut self, e: ExprId, dest: Local, handlers: &[Handler], body: ExprId) {
         self.scopes.open();
+        let mut allocs = Vec::new();
         for (k, h) in handlers.iter().enumerate() {
             let ty = self.ty(h.value);
             let borrow = match self.solver.norm(&ty) {
@@ -1030,10 +1031,15 @@ impl Builder<'_> {
                 self.call_into(None, callee, Place::local(unit), vec![a], h.range);
                 self.scopes.push(ScopeItem::AllocPop);
                 self.cfg.node = self.scopes.node();
+                allocs.push(installed);
             }
             self.installed.insert((e, k), Place::local(installed));
         }
+        // What the block allocates is a view of its allocator (`alloc.view.1`).
+        let outer = self.cfg.alloc_in.len();
+        self.cfg.alloc_in.extend(allocs);
         self.eval_into(dest, body);
+        self.cfg.alloc_in.truncate(outer);
         let depth = self.scopes.depth() - 1;
         self.leave_scopes(depth);
         self.scopes.close();
@@ -1638,6 +1644,7 @@ impl Builder<'_> {
         range: TextRange,
     ) {
         let name = fn_name(self.items, callee.func());
+        let dest_taint = dest.clone();
         let fails = self.fx.fns[callee.func() as usize]
             .fails
             .subst(callee.args());
@@ -1661,8 +1668,10 @@ impl Builder<'_> {
             },
             target,
         );
+        self.cfg.alloc_result(&dest_taint);
         if let (Some((err, action)), Some(b)) = (edge, error_bb) {
             self.cfg.continue_in(b);
+            self.cfg.alloc_result(&Place::local(err));
             self.on_error_block(err, action);
             self.cfg.continue_in(target);
         }

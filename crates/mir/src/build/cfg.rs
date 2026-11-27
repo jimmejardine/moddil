@@ -20,6 +20,8 @@ pub(super) struct Cfg {
     pub(super) node: u32,
     /// Whether the blocks made from now on are cleanup code.
     pub(super) cleanup: bool,
+    /// The allocators of the `with Alloc` blocks being built, innermost last (`alloc.view.1`).
+    pub(super) alloc_in: Vec<Local>,
 }
 
 impl Cfg {
@@ -31,6 +33,7 @@ impl Cfg {
             span: TextRange::default(),
             node: 0,
             cleanup: false,
+            alloc_in: Vec::new(),
         };
         cfg.current = cfg.new_block();
         cfg
@@ -157,7 +160,29 @@ impl Cfg {
     }
 
     pub(super) fn assign(&mut self, dest: impl Into<Place>, r: Rvalue) {
+        let taint = match (&r, self.alloc_in.last()) {
+            (Rvalue::Ref(m, p), Some(&from)) => Some(Statement::AllocTaint {
+                place: p.clone(),
+                from,
+                borrow: Some(*m),
+            }),
+            _ => None,
+        };
         self.push(Statement::Assign(dest.into(), r));
+        if let Some(t) = taint {
+            self.push(t);
+        }
+    }
+
+    /// In a `with Alloc` block, `place` may hold what its allocator allocated (`alloc.view.1`).
+    pub(super) fn alloc_result(&mut self, place: &Place) {
+        if let Some(&from) = self.alloc_in.last() {
+            self.push(Statement::AllocTaint {
+                place: place.clone(),
+                from,
+                borrow: None,
+            });
+        }
     }
 
     /// Ends the current block with `t` and continues in a new block (unreachable unless

@@ -5,6 +5,7 @@ name = "moddil"
 edition = "2027"
 
 [dependencies]
+alloc = { path = "../alloc" }
 collections = { path = "../collections" }
 sync = { path = "../sync" }
 rand = { path = "../rand" }

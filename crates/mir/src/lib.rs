@@ -295,6 +295,19 @@ pub enum Statement {
         /// Its value.
         value: Operand,
     },
+    /// In a `with Alloc` block (`alloc.view.1`): `place` may now hold what the allocator `from`
+    /// (the block's `&dyn Alloc`) allocated. For a call's result or error (`borrow` is `None`),
+    /// the value at `place`; for a borrow of `place` (`Some(mutable)`), what the borrowed place
+    /// may be given through it. The borrow checker keeps such a place inside the allocator's
+    /// life, as if it borrowed the allocator; it runs nothing.
+    AllocTaint {
+        /// What may hold the allocator's memory.
+        place: Place,
+        /// The block's allocator.
+        from: Local,
+        /// For a borrow of `place`: whether it is `&mut`.
+        borrow: Option<bool>,
+    },
 }
 
 /// A part of an `assert`'s condition (a local, a call, an operator): where it is, the place its

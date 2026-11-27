@@ -1,0 +1,82 @@
+// covers: alloc.view.1
+//
+// The ownership check runs once the types check, so these errors are in a mod of their own.
+
+/// An allocator that takes its memory from the default.
+struct Pool;
+
+impl Alloc for Pool {
+    fn alloc(&self, size: int, align: int) -> *mut u8 with fail(OutOfMemory) {
+        System.alloc(size, align)?
+    }
+
+    fn free(&self, p: *mut u8, size: int, align: int) {
+        System.free(p, size, align)
+    }
+}
+
+fn kept_inside() -> int {
+    let p = Pool;
+    let n = with Alloc = &p {
+        let v: Vec<int> = [1, 2, 3];
+        v.len()
+    };
+    n
+}
+
+fn returned() -> Vec<int> {
+    let p = Pool;
+    with Alloc = &p {  //~ E0308
+        let v: Vec<int> = [1, 2, 3];
+        v
+    }
+}
+
+fn outlived() -> int {
+    let v: Vec<int>;
+    {
+        let p = Pool;
+        v = with Alloc = &p {  //~ E0308
+            let w: Vec<int> = [1, 2, 3];
+            w
+        };
+    }
+    v.len()
+}
+
+fn grown_outside_is_kept() -> int {
+    let p = Pool;
+    let mut v: Vec<int> = [];
+    with Alloc = &p {
+        v.push(1);
+    }
+    v.len()
+}
+
+fn pushed_outside_outlives() -> int {
+    let mut v: Vec<String> = [];
+    {
+        let p = Pool;
+        with Alloc = &p {  //~ E0308
+            v.push("allocated in the block".to_string());
+        }
+    }
+    v.len()
+}
+
+fn lent(names: &mut Vec<String>) {
+    let p = Pool;
+    with Alloc = &p {
+        names.push("x".to_string());  //~ E0317
+    }
+}
+
+fn changed_while_used() -> int {
+    let mut p = Pool;
+    let v = with Alloc = &p {
+        let v: Vec<int> = [1, 2, 3];
+        v
+    };
+    p = Pool;  //~ E0306
+    v.len()
+}

@@ -15,6 +15,11 @@
 //!   local it borrows may not leave scope (E0308).
 //! - **Returns.** A returned borrow must come from a borrowed parameter that the signature allows
 //!   (E0308, E0310).
+//! - **Allocators.** In a `with Alloc` block, what may hold memory the block's allocator gives
+//!   (a call's result, a place borrowed `&mut`, or one with interior mutability borrowed) holds
+//!   the loans of the allocator's borrow, so it lives no longer than the allocator and is not
+//!   alive when the allocator is changed (`alloc.view.1`). A place the caller lent cannot be given
+//!   such memory (E0317).
 //! - **Drops.** Dropping a value is like moving it out, except that one that may have been moved
 //!   already is not an error (a drop flag decides at run time). A value whose type has a
 //!   destructor cannot be partly moved out of (E0314), except by its own destructor.
@@ -177,6 +182,9 @@ struct Checker<'a> {
     /// Whether the body is a const's computed when compiling, whose result is frozen with what
     /// it borrows (`comptime.static.3`).
     static_result: bool,
+    /// The loans of the allocators of `with Alloc` blocks, which what they allocate holds
+    /// (`alloc.view.1`).
+    alloc_loans: HashSet<usize>,
 }
 
 /// The loans each local may hold.
@@ -322,6 +330,7 @@ impl<'a> Checker<'a> {
             written_params: u32::MAX,
             destructor: false,
             static_result: false,
+            alloc_loans: HashSet::new(),
             statics: body
                 .blocks
                 .iter()
@@ -764,6 +773,11 @@ impl<'a> Checker<'a> {
             }
             Statement::Assert { cond, .. } => self.operand(at, span, cond, h, m, check),
             Statement::Observe { value, .. } => self.operand(at, span, value, h, m, check),
+            Statement::AllocTaint {
+                place,
+                from,
+                borrow,
+            } => self.alloc_taint(span, place, *from, *borrow, h, check),
             Statement::Read(p) => {
                 if check {
                     self.access((at, span), p, Access::Read, h, m, None);
@@ -780,6 +794,68 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// In a `with Alloc` block, `place` may come to hold what the allocator `from` gives
+    /// (`alloc.view.1`): a call's result or error (`borrow` is `None`), or a place borrowed
+    /// (`&mut`, or shared with interior mutability). The locals holding it take the allocator's
+    /// loans; one the caller lent cannot (E0317).
+    fn alloc_taint(
+        &mut self,
+        span: TextRange,
+        place: &Place,
+        from: Local,
+        borrow: Option<bool>,
+        h: &mut Holders,
+        check: bool,
+    ) {
+        let given = h[from.index()].clone();
+        if given.is_empty() {
+            return;
+        }
+        let ty = self.type_upto(place, place.projection.len());
+        let taints = match borrow {
+            None | Some(true) => self.items.may_own_heap(&ty),
+            Some(false) => self.items.has_interior(&ty),
+        };
+        if !taints {
+            return;
+        }
+        self.alloc_loans.extend(given.iter().copied());
+        // What it is reached through: the locals a borrow it goes through borrows.
+        let mut targets = Vec::new();
+        if place.is_indirect() {
+            for &li in &h[place.local.index()] {
+                let loan = &self.loans[li];
+                if loan.param.is_some() {
+                    if check {
+                        let what = self.name(&direct(place));
+                        self.report(Diagnostic::error(
+                            Code::E0317,
+                            span,
+                            format!(
+                                "this could give {what}, which the caller lent, memory from the \
+                                 allocator a `with Alloc` around it installs, which may not \
+                                 outlive the block: change it outside the block, or make the \
+                                 value in the block and return it"
+                            ),
+                        ));
+                    }
+                } else {
+                    targets.push(loan.place.local);
+                }
+            }
+        } else {
+            targets.push(place.local);
+        }
+        for t in targets {
+            let own: Vec<usize> = given
+                .iter()
+                .copied()
+                .filter(|&li| self.loans[li].place.local != t)
+                .collect();
+            h[t.index()].extend(own);
+        }
+    }
+
     /// A local leaving scope while a live loan still borrows it (E0308).
     fn storage_dead(&mut self, at: Point, l: Local, h: &Holders) {
         for li in self.live_loans(at, h) {
@@ -789,13 +865,17 @@ impl<'a> Checker<'a> {
                 && loan.place.projection.first() != Some(&Projection::Deref)
             {
                 let what = self.name(&Place::local(l));
-                let d = Diagnostic::error(
-                    Code::E0308,
-                    loan.span,
+                let text = if self.alloc_loans.contains(&li) {
+                    format!(
+                        "this installs {what} as the allocator, and what it allocated is still \
+                         used after {what} goes out of scope"
+                    )
+                } else {
                     format!(
                         "this borrows {what}, which goes out of scope while the borrow is still used"
-                    ),
-                );
+                    )
+                };
+                let d = Diagnostic::error(Code::E0308, loan.span, text);
                 self.report(d);
             }
         }
@@ -1097,6 +1177,17 @@ impl<'a> Checker<'a> {
                         self.name(&Place::local(Local(p + 1)))
                     ),
                 )),
+                None if !from_param && self.alloc_loans.contains(&li) => {
+                    found.push(Diagnostic::error(
+                        Code::E0308,
+                        loan.span,
+                        format!(
+                            "this installs {} as the allocator, which belongs to the function, so \
+                             what it allocated cannot be returned",
+                            self.name(&direct(&loan.place))
+                        ),
+                    ));
+                }
                 None if !from_param => found.push(Diagnostic::error(
                     Code::E0308,
                     loan.span,
@@ -1229,6 +1320,7 @@ fn uses_defs(stmt: Option<&Statement>, term: Option<&Terminator>) -> (Vec<Local>
             }
             Statement::Assert { cond, .. } => op(cond, &mut uses),
             Statement::Observe { value, .. } => op(value, &mut uses),
+            Statement::AllocTaint { from, .. } => uses.push(*from),
             Statement::Read(p) => uses.push(p.local),
             Statement::StorageDead(l) => def = Some(*l),
         }

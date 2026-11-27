@@ -124,6 +124,7 @@ c_projects! {
 }
 
 projects! {
+    alloc => "mods/alloc/tests",
     collections => "mods/collections/tests",
     crypto => "mods/crypto/tests",
     decimal => "mods/decimal/tests",

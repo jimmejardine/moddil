@@ -1,0 +1,157 @@
+//! Arenas (`specs/stdlib.md`: Scratch arenas): `Arena`, a bump allocator that hands out memory
+//! from blocks it takes from the default allocator and gives it all back at once, and `Scratch`,
+//! an arena reset at the end of each scope. Each is put in scope as any allocator is, with
+//! `with Alloc = &arena { … }` (`alloc.with.1`); what the block allocates is then a view of the
+//! arena, which the borrow checker keeps from outliving it or being used after `reset`
+//! (`alloc.view.1`).
+
+use core::atomic::{self, Ordering};
+use core::cell::UnsafeCell;
+
+/// The alignment of each block an arena takes, and so the most a request gets from a shared
+/// block; a request aligned more gets a block of its own.
+const BLOCK_ALIGN: int = 16;
+
+/// A bump allocator. It hands out memory from its current block, in order, and takes another
+/// block from the default allocator when that one is full. Freeing one allocation does nothing:
+/// `reset` gives all of it back at once, and dropping the arena returns its blocks.
+pub struct Arena {
+    /// The size of the blocks it takes (a request larger than that gets a block of its size).
+    block: int,
+    /// The blocks it took from the default allocator (each one's address, size and alignment),
+    /// the current one last.
+    blocks: UnsafeCell<Vec<(*mut u8, int, int)>>,
+    /// Where the next allocation in the current block may start.
+    at: UnsafeCell<int>,
+    /// The bytes handed out since the last reset, and how many allocations.
+    used: UnsafeCell<int>,
+    count: UnsafeCell<int>,
+    /// 1 while a task allocates from it: tasks started in its block share it.
+    lock: UnsafeCell<int>,
+}
+
+impl Arena {
+    /// An arena taking blocks of `block` bytes, the first when it is first asked for memory.
+    pub fn new(block: int) -> Arena {
+        Arena { block: if block > 0 { block } else { 1 }, blocks: UnsafeCell::new(Vec::new()), at: UnsafeCell::new(0), used: UnsafeCell::new(0), count: UnsafeCell::new(0), lock: UnsafeCell::new(0) }
+    }
+
+    /// The bytes handed out since it was made or last reset.
+    pub fn used(&self) -> int {
+        atomic::load(self.used.get(), Ordering::SeqCst)
+    }
+
+    /// The allocations made since it was made or last reset.
+    pub fn allocs(&self) -> int {
+        atomic::load(self.count.get(), Ordering::SeqCst)
+    }
+
+    /// The blocks it holds.
+    pub fn blocks(&self) -> int {
+        self.locked(|| unsafe("the arena's lock is held") {
+            (*self.blocks.get()).len()
+        })
+    }
+
+    /// Gives back everything it handed out, keeping its first block for what comes next. It
+    /// takes `&mut self`, so nothing it allocated is still used (`alloc.view.1`).
+    pub fn reset(&mut self) {
+        unsafe("`&mut self`: no other task uses the arena") {
+            let blocks = &mut *self.blocks.get();
+            while blocks.len() > 1 {
+                if let Some((p, size, align)) = blocks.pop() {
+                    System.free(p, size, align);
+                }
+            }
+            *self.at.get() = 0;
+            *self.used.get() = 0;
+            *self.count.get() = 0;
+        }
+    }
+
+    /// Runs `f` holding the arena's lock.
+    fn locked<R>(&self, f: impl FnOnce() -> R) -> R {
+        while atomic::swap(self.lock.get(), 1, Ordering::Acquire) == 1 {}
+        let r = f();
+        atomic::store(self.lock.get(), 0, Ordering::Release);
+        r
+    }
+
+    /// `size` bytes aligned to `align`, with the lock held.
+    fn bump(&self, size: int, align: int) -> Result<*mut u8, OutOfMemory> {
+        unsafe("the arena's lock is held, so no other task uses its state") {
+            let blocks = &mut *self.blocks.get();
+            let mut off = (*self.at.get() + align - 1) / align * align;
+            let mut current = match blocks.last() {
+                Some(&(p, n, _)) if align <= BLOCK_ALIGN && off + size <= n => p,
+                _                                                           => core::ptr::null_mut(),
+            };
+            if core::ptr::is_null(current) {
+                let n = if size > self.block { size } else { self.block };
+                let al = if align > BLOCK_ALIGN { align } else { BLOCK_ALIGN };
+                current = match try { System.alloc(n, al)? } {
+                    Ok(p)  => p,
+                    Err(e) => return Err(e),
+                };
+                blocks.push((current, n, al));
+                off = 0;
+            }
+            *self.at.get() = off + size;
+            *self.used.get() += size;
+            *self.count.get() += 1;
+            Ok(core::ptr::add_mut(current, off))
+        }
+    }
+}
+
+impl Alloc for Arena {
+    fn alloc(&self, size: int, align: int) -> *mut u8 with fail(OutOfMemory) {
+        let align = if align > 1 { align } else { 1 };
+        match self.locked(|| self.bump(size, align)) {
+            Ok(p)  => p,
+            Err(e) => fail(e),
+        }
+    }
+
+    /// One allocation is not given back on its own: `reset` and dropping the arena give back
+    /// all of them.
+    fn free(&self, p: *mut u8, size: int, align: int) {}
+}
+
+impl Drop for Arena {
+    fn drop(self) {
+        unsafe("the arena is dropped, so no other task uses it") {
+            let blocks = &mut *self.blocks.get();
+            while let Some((p, size, align)) = blocks.pop() {
+                System.free(p, size, align);
+            }
+        }
+    }
+}
+
+/// An arena reset whole at the end of each scope (`specs/stdlib.md`: Scratch arenas): a
+/// frame's temporary memory, given back in one step.
+pub struct Scratch {
+    arena: Arena,
+}
+
+impl Scratch {
+    /// A scratch arena whose blocks are `capacity` bytes.
+    pub fn with_capacity(capacity: int) -> Scratch {
+        Scratch { arena: Arena::new(capacity) }
+    }
+
+    /// Runs `f` with the arena, then resets it. `f` installs it where it wants its memory
+    /// (`with Alloc = tmp { … }`); what it allocates there cannot outlive `f`
+    /// (`alloc.view.1`), and `f` gives nothing back, so nothing is used after the reset. What a
+    /// frame keeps goes out through what `f` captures, made outside the arena.
+    pub fn scope(&mut self, f: impl FnOnce(&Arena)) {
+        f(&self.arena);
+        self.arena.reset();
+    }
+
+    /// The bytes the arena handed out in the scope running now, or since the last one ended.
+    pub fn used(&self) -> int {
+        self.arena.used()
+    }
+}

@@ -1,0 +1,70 @@
+// covers: alloc.ambient.1, alloc.handler.1, alloc.task.2
+
+/// An allocator that takes its memory from the default.
+struct Pool;
+
+impl Alloc for Pool {
+    fn alloc(&self, size: int, align: int) -> *mut u8 with fail(OutOfMemory) {
+        System.alloc(size, align)?
+    }
+
+    fn free(&self, p: *mut u8, size: int, align: int) {
+        System.free(p, size, align)
+    }
+}
+
+fn named(n: int) -> int with Alloc {  //~ E0612
+    n
+}
+
+trait Sink {
+    fn put(&self, s: String);
+}
+
+fn send(s: String) with sink: Sink {
+    sink.put(s)
+}
+
+struct Drain;
+
+impl Sink for Drain {
+    fn put(&self, s: String) {}
+}
+
+fn outer_handler() {
+    with Sink = Drain {
+        with Alloc = Pool {
+            send("allocated in the block".to_string());  //~ E0613
+        }
+    }
+}
+
+fn inner_handler() {
+    with Alloc = Pool {
+        with Sink = Drain {
+            send("allocated in the block".to_string());
+        }
+    }
+}
+
+fn spawned_out() {
+    scope(|s| {
+        with Alloc = Pool {
+            s.spawn (|| {  //~ E0610
+                let v: Vec<int> = [1, 2];
+                v.len()
+            });
+        }
+    });
+}
+
+fn spawned_in() {
+    with Alloc = Pool {
+        scope(|s| {
+            s.spawn (|| {
+                let v: Vec<int> = [1, 2];
+                v.len()
+            });
+        });
+    }
+}

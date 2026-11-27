@@ -55,6 +55,27 @@ pub(crate) fn check_impls(tree: &ItemTree) -> Vec<Found> {
             );
             continue;
         }
+        // An allocator gives memory compiled code writes to: implementing one is unsafe code
+        // (`alloc.trait.1`).
+        if let Some(tr) = &imp.trait_ref
+            && tree.lang("Alloc") == Some(tr.trait_)
+            && imp.src != Src::Prelude
+            && !tree
+                .mods
+                .get(tree.mod_of(imp.module) as usize)
+                .is_none_or(|m| m.unsafe_ok)
+        {
+            push(
+                &mut found,
+                Diagnostic::error(
+                    Code::E0219,
+                    imp.range,
+                    "an allocator gives memory the program writes to, so `Alloc` is implemented \
+                     only in a mod whose manifest lists the `unsafe` capability: \
+                     `capabilities = [\"unsafe\"]` under `[mod]`",
+                ),
+            );
+        }
         let Some(tr) = &imp.trait_ref else {
             // Inherent impls: only for the file's own structs and enums.
             match imp.self_ty.adt() {

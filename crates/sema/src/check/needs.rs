@@ -399,7 +399,26 @@ impl Checker<'_> {
                         continue;
                     }
                 }
-                if let Some(&(w, k, _)) = n.installs.iter().rev().find(|(_, _, x)| *x == t) {
+                if let Some(at) = n.installs.iter().rposition(|(_, _, x)| *x == t) {
+                    let (w, k, _) = n.installs[at];
+                    // A trait's handler from outside an allocator's block could keep what the
+                    // block allocates, past the block (`alloc.handler.1`).
+                    let alloc = self.items.lang("Alloc");
+                    let inside_alloc = n.installs[at + 1..]
+                        .iter()
+                        .any(|(_, _, x)| matches!(x, Ty::Dyn(tr, _) if Some(tr.trait_) == alloc));
+                    if inside_alloc && matches!(t, Ty::Dyn(..)) {
+                        let name = show_effect(&t);
+                        self.report(
+                            Code::E0613,
+                            n.range,
+                            format!(
+                                "this call uses the `{name}` handler installed outside the \
+                                 `with Alloc` around it, which could keep memory the block's \
+                                 allocator gives past the block: install `{name}` inside it"
+                            ),
+                        );
+                    }
                     found.push(Evidence::Install(w, k));
                     continue;
                 }

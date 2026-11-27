@@ -54,7 +54,7 @@ and a code never changes meaning.
 | E0216 | A default on a method of an impl of a trait | [expr.call.default.1](expressions/calls.md) |
 | E0217 | A `select` arm whose operation is not one a `select` waits on, `#[selectable]` on a function that does not suspend, or one that does not receive first or whose rest uses a handler | [task.select.1](concurrency.md), [task.select.3](concurrency.md), [task.select.4](concurrency.md) |
 | E0218 | A raw pointer dereferenced, or a C function called, outside an `unsafe` block | [type.ptr.1](unsafe.md) |
-| E0219 | An `unsafe` block in a mod without the `unsafe` capability, or with no reason given | [expr.unsafe.1](unsafe.md), [mod.caps.1](unsafe.md) |
+| E0219 | An `unsafe` block in a mod without the `unsafe` capability, or with no reason given; `Alloc` implemented in one | [expr.unsafe.1](unsafe.md), [mod.caps.1](unsafe.md), [alloc.trait.1](alloc.md) |
 | E0220 | `core::os` or `core::gpu` named in a mod without the `os` capability | [os.cap.1](os.md), [gpu.cap.1](gpu.md) |
 | E0221 | A `#[kernel]` that is not `fn k(params: &P, out: &mut Tile)`, or that needs handlers, can fail, suspends or spawns, or holds what a GPU does not have | [gpu.kernel.1](gpu.md), [gpu.kernel.2](gpu.md) |
 | E0222 | A C or `#[export]` function with a type C does not have, or with effects, errors or suspension; an `extern` block that is not `extern "C"`; a C function with a body; an `on_trap` that is not one of the result's integers | [ffi.types.1](interop.md), [ffi.extern.1](interop.md), [ffi.export.1](interop.md), [ffi.export.3](interop.md) |
@@ -65,7 +65,7 @@ and a code never changes meaning.
 | E0305 | Conflicting borrows | [borrow.rules.1](borrows.md) |
 | E0306 | Assignment to or move of a borrowed value | [borrow.rules.1](borrows.md), [borrow.guard.1](borrows.md) |
 | E0307 | Use of a value borrowed with `&mut` | [borrow.rules.1](borrows.md) |
-| E0308 | A borrow that outlives its value | [borrow.scope.1](borrows.md), [item.fn.ret-borrow.1](items/functions.md), [view.borrow.1](views.md) |
+| E0308 | A borrow that outlives its value | [borrow.scope.1](borrows.md), [item.fn.ret-borrow.1](items/functions.md), [view.borrow.1](views.md), [alloc.view.1](alloc.md) |
 | E0309 | A borrow, closure or view stored in a field of a struct or enum that is not a view, or a `&mut` of a borrow | [borrow.type.1](borrows.md), [view.2](views.md), [expr.closure.capture.1](expressions/closures.md) |
 | E0310 | A returned borrow from a parameter the signature does not allow, or of a handler the function was given | [item.fn.ret-borrow.1](items/functions.md), [expr.closure.stored.1](expressions/closures.md) |
 | E0311 | A type that cannot be `Copy` | [own.copy.derive.1](ownership.md) |
@@ -74,6 +74,7 @@ and a code never changes meaning.
 | E0314 | A field moved out of a value whose type has a destructor | [own.drop.partial.1](ownership.md) |
 | E0315 | An element moved out of an array or slice | [expr.index.move.1](expressions/arrays.md) |
 | E0316 | Text sliced with a position found in other text | [text.pos.1](text.md) |
+| E0317 | In a `with Alloc` block, a place the caller lent given what the block's allocator may give | [alloc.view.1](alloc.md) |
 | E0401 | A name used as a trait that is not one | [item.trait.1](items/traits.md) |
 | E0402 | A type that does not implement a trait it must | [generic.bound.1](generics.md), [item.trait.super.1](items/traits.md), [attr.derive.1](attributes.md), [type.dyn.coerce.1](types.md), [eff.with.1](effects.md), [expr.fmt.2](text.md) |
 | E0403 | A method or function that the type does not have | [expr.method.1](expressions/methods.md), [expr.path.assoc.1](expressions/methods.md), [generic.bound.1](generics.md) |
@@ -105,8 +106,10 @@ and a code never changes meaning.
 | E0606 | An effect listed twice, or given two handlers by one `with` | [eff.1](effects.md), [eff.with.1](effects.md), [eff.control.1](effects.md) |
 | E0607 | Effects inferred without end | [eff.infer.1](effects.md) |
 | E0608 | A parameter of `main` that is not a root capability (a struct marked `#[root_capability]`), or one taken twice | [main.root.1](items/functions.md) |
-| E0610 | A task spawned into a scope opened outside a `with` whose handler it uses | [task.with.1](concurrency.md) |
+| E0610 | A task spawned into a scope opened outside a `with` whose handler it uses, or outside the `with Alloc` block it is started in | [task.with.1](concurrency.md), [alloc.task.2](alloc.md) |
 | E0611 | A runtime installed other than by `main`'s outermost `with`, once | [task.runtime.1](concurrency.md) |
+| E0612 | `Alloc` named in a signature | [alloc.ambient.1](alloc.md) |
+| E0613 | In a `with Alloc` block, a need met by a trait's handler installed outside it | [alloc.handler.1](alloc.md) |
 | E0609 | A handler's effect in the bound of a closure parameter, or in a stored or returned closure's type: a closure's needs are met where it is written | [expr.closure.effects.2](expressions/closures.md), [expr.closure.stored.1](expressions/closures.md), [expr.closure.result.1](expressions/closures.md) |
 | E0801 | A closure whose kind is weaker than a bound needs | [expr.closure.param.1](expressions/closures.md) |
 | E0802 | A stored closure (`Box<dyn Fn…>`) that captures a local holding a borrow | [expr.closure.stored.1](expressions/closures.md) |

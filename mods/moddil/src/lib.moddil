@@ -2,6 +2,7 @@
 //! capabilities are `moddil::root`, the terminal `moddil::io`, and running a server
 //! `moddil::runtime`.
 
+pub use alloc;
 pub use collections;
 pub use sync;
 pub use rand;
