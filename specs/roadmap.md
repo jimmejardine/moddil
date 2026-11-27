@@ -352,12 +352,6 @@ Debug builds and `runtime-sim` report leaked `Rc` cycles with their allocation s
 the runtime keeps the live allocations, and at a run's end (or on asking) finds those only
 reachable from each other.
 
-**P68. A trap in `main` under `moddil run --wasm`** (`crates/wasm`, `crates/moddil`; M). A run of
-a `main` that traps (`assert(x == 2)` failing) stops with "the WASM run stopped (a backend bug):
-an unknown command: " instead of reporting the trap with its parts and exiting with 70, as the
-native and interpreted runs do. A test that traps under `moddil test --wasm` is reported
-properly; the `main` path (`run_main`, and the host's `main` command) is not.
-
 ## Known limits, with no package yet
 - ThreadSanitizer cannot follow tasks yet: on coroutines' stacks it crashes in
   `__tsan_func_entry`, with or without its fiber calls (`__tsan_switch_to_fiber`, tried and left

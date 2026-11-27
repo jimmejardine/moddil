@@ -240,7 +240,9 @@ impl Host {
         let Some(stdin) = stdin.as_mut() else {
             return Err(Wasm::Crash("the host has ended".to_string()));
         };
-        writeln!(stdin, "{cmd}")
+        // One write: the host reads a line at a time, and a lone newline is an empty command.
+        stdin
+            .write_all(format!("{cmd}\n").as_bytes())
             .and_then(|()| stdin.flush())
             .map_err(|e| Wasm::Crash(format!("the host stopped: {e}")))
     }

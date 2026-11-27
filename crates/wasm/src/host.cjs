@@ -83,12 +83,14 @@ if (isMainThread) {
     lines = [];
     let partial = pending;
     pending = '';
+    // A buffer of its own: the synchronous `line` reads into `buf`.
+    const abuf = Buffer.alloc(1 << 16);
     const more = () =>
-      fs.read(0, buf, 0, buf.length, null, (e, n) => {
+      fs.read(0, abuf, 0, abuf.length, null, (e, n) => {
         if (e || n === 0) {
           lines.push('quit');
         } else {
-          partial += buf.toString('utf8', 0, n);
+          partial += abuf.toString('utf8', 0, n);
           let nl;
           while ((nl = partial.indexOf('\n')) >= 0) {
             lines.push(partial.slice(0, nl).trim());
@@ -124,19 +126,30 @@ if (isMainThread) {
       nums.map(Number);
     const core = await import(pathToFileURL(path.join(__dirname, 'core.mjs')).href);
     const hex = (a, n) => Buffer.from(p.bytes(Number(a), Number(n))).toString('hex');
-    // Answers reads while an observation waits, until `go`.
+    // Answers reads while an observation waits, until `go`. Once a run of `main` reads standard
+    // input without blocking (a failed `assert` in it shows its parts), the lines come from
+    // that queue, and the observation is a promise the program waits for (JSPI): one reader
+    // of standard input at a time.
+    const answer = (l) => {
+      const [cmd, a, b] = l.split(' ');
+      if (cmd === 'go') return true;
+      if (cmd === 'quit') {
+        quit();
+        return true;
+      }
+      if (cmd === 'read') say({ hex: hex(a, b) });
+      else say({ fatal: 'an unknown command while observing: ' + cmd });
+      return false;
+    };
     const observe = (site, addr) => {
       say({ o: site, a: addr });
-      for (;;) {
-        const [cmd, a, b] = line().split(' ');
-        if (cmd === 'go') return;
-        if (cmd === 'quit') {
-          quit();
-          return;
-        }
-        if (cmd === 'read') say({ hex: hex(a, b) });
-        else say({ fatal: 'an unknown command while observing: ' + cmd });
+      if (!lines) {
+        while (!answer(line()));
+        return;
       }
+      return (async () => {
+        while (!answer(await nextLine()));
+      })();
     };
     const log = (level, text) => fs.writeSync(2, `[${level}] ${text}\n`);
     try {
@@ -160,6 +173,8 @@ if (isMainThread) {
         },
         observe,
         log,
+        // Every entry a promising call, so an observation may wait for its host (`observe`).
+        promisingAlways: true,
       });
     } catch (e) {
       say({ fatal: String(e) });

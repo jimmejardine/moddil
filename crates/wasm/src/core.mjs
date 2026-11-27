@@ -542,7 +542,10 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
   };
 
   const host = {
-    moddil_rt_observe: (site, addr) => observe(site, Number(addr)),
+    // An observation may wait for its host (a run of `main`'s, `host.cjs`): a promise then.
+    moddil_rt_observe: jspi
+      ? new WebAssembly.Suspending((site, addr) => observe(site, Number(addr)))
+      : (site, addr) => observe(site, Number(addr)),
     moddil_rt_log: (level, p, n) => log(LEVELS[level], text(Number(p), Number(n))),
     moddil_host_switch: jspi
       ? new WebAssembly.Suspending(switchTo)

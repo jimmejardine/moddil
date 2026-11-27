@@ -78,6 +78,32 @@ fn a_failed_assert_shows_its_parts() {
     assert!(stderr.contains("= 275"), "{stderr}");
 }
 
+/// A failed `assert` in `main` shows its parts and exits with 70 (`main.trap.1`) on every runtime:
+/// natively, on the interpreter, and as WASM, whose host answers the parts' reads while `main`
+/// reads its input without blocking.
+#[test]
+fn a_failed_assert_in_main_shows_its_parts_everywhere() {
+    let text = "fn fee(a: int) -> int { a / 10 }
+                fn main() { let amount = 250; assert(fee(amount) + amount == 260); }
+";
+    let path = file("assert_main.moddil", text);
+    for how in [&["run"][..], &["run", "--interp"], &["run", "--wasm"]] {
+        let out = moddil(how, &path);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        if stderr.contains("no Node") {
+            eprintln!("skipped {how:?}: {stderr}");
+            continue;
+        }
+        assert_eq!(out.status.code(), Some(70), "{how:?}: {stderr}");
+        assert!(
+            stderr.contains("trap: assertion failed"),
+            "{how:?}: {stderr}"
+        );
+        assert!(stderr.contains("fee(amount) + amount"), "{how:?}: {stderr}");
+        assert!(stderr.contains("= 275"), "{how:?}: {stderr}");
+    }
+}
+
 /// A `// =>` line is an expected value (`testing.md`: Examples are tests): a test fails where the
 /// value is another, or the line never runs, alike everywhere.
 #[test]
