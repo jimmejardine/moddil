@@ -336,7 +336,7 @@ loop {
     scratch.scope(|tmp| {                              // tmp: &Arena, valid for this frame only
         with Alloc = tmp {
             let mut visible = Vec::new();              // grows inside the arena
-            tick(&mut world, &mut visible);
+            tick(&world, &mut visible);                // `world` is outside: read, not changed
             render(&visible);
         }
     });                                                // O(1) reset; nothing is freed one by one

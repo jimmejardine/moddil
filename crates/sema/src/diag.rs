@@ -167,6 +167,9 @@ codes! {
     E0315 = "move out of an element",
     /// Text sliced with a position found in other text (`&b[a.find(' ')?..]`).
     E0316 = "position of other text",
+    /// In a `with Alloc` block, a place the caller lent changed so that it could hold memory the
+    /// block's allocator gives (`alloc.view.1`).
+    E0317 = "lent place given an allocator's memory",
     /// A name used as a trait that is not one.
     E0401 = "not a trait",
     /// A type that does not implement a trait it must.
@@ -249,6 +252,12 @@ codes! {
     E0610 = "task outliving its handler",
     /// A runtime installed other than by `main`'s outermost `with`, once (`task.runtime.1`).
     E0611 = "runtime installed outside `main`",
+    /// `Alloc` named as an effect in a signature: the allocator in scope is ambient
+    /// (`alloc.ambient.1`).
+    E0612 = "allocator named in a signature",
+    /// In a `with Alloc` block, a need met by a trait's handler installed outside it, which could
+    /// keep what the block's allocator gives (`alloc.handler.1`).
+    E0613 = "outer handler in an allocator's block",
     /// A closure whose kind is weaker than a bound needs: it changes or moves what it captures,
     /// where `Fn` or `FnMut` is needed.
     E0801 = "closure of the wrong kind",

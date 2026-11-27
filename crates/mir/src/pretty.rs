@@ -187,6 +187,11 @@ impl fmt::Debug for Body {
                     Statement::Observe { range, value } => {
                         writeln!(f, "        observe({value:?}) @ {range:?};")?;
                     }
+                    Statement::AllocTaint {
+                        place,
+                        from,
+                        borrow,
+                    } => writeln!(f, "        alloc_taint({place:?}, {from:?}, {borrow:?});")?,
                 }
             }
             match &block.terminator {

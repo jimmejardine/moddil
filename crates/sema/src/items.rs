@@ -947,6 +947,63 @@ impl ItemTree {
         })
     }
 
+    /// Whether a value of type `ty` may hold memory an allocator gave (`alloc.view.1`): a
+    /// buffer, or a borrow (which may point into one), anywhere in it; or a type not known yet.
+    pub fn may_own_heap(&self, ty: &Ty) -> bool {
+        self.type_has(ty, &mut Vec::new(), &|t| {
+            matches!(
+                t,
+                Ty::Buf(_)
+                    | Ty::Ref(..)
+                    | Ty::Dyn(..)
+                    | Ty::Param(..)
+                    | Ty::Opaque(_)
+                    | Ty::Assoc(_)
+            )
+        })
+    }
+
+    /// Whether a value of type `ty` may be changed through a shared borrow of it
+    /// (`alloc.view.1`): it holds an `UnsafeCell`, a handle the runtime changes (a channel's
+    /// end, a scope), or a type not known yet, other than through a borrow or a buffer.
+    pub fn has_interior(&self, ty: &Ty) -> bool {
+        self.type_has(ty, &mut Vec::new(), &|t| match t {
+            Ty::Dyn(..) | Ty::Param(..) | Ty::Opaque(_) | Ty::Assoc(_) => true,
+            Ty::Adt(a, ..) => matches!(
+                &*self.adts[*a as usize].name,
+                "UnsafeCell" | "Sender" | "Receiver" | "Scope"
+            ),
+            _ => false,
+        })
+    }
+
+    /// Whether `ty`, or a type it holds by value (its fields, elements and captures), is one
+    /// `hit` says; `seen` the structs and enums already looked into.
+    fn type_has(&self, ty: &Ty, seen: &mut Vec<u32>, hit: &dyn Fn(&Ty) -> bool) -> bool {
+        if hit(ty) {
+            return true;
+        }
+        match ty {
+            Ty::Tuple(ts) | Ty::Errors(ts) => ts.iter().any(|t| self.type_has(t, seen, hit)),
+            Ty::Array(t, _) | Ty::Slice(t) | Ty::Buf(t) => self.type_has(t, seen, hit),
+            Ty::Closure(c) => c.captures.iter().any(|t| self.type_has(t, seen, hit)),
+            Ty::Refined(..) => self.type_has(&self.base(ty), seen, hit),
+            Ty::Adt(a, ..) => {
+                if seen.contains(a) {
+                    return false;
+                }
+                seen.push(*a);
+                let n = self.adts[*a as usize].variants.len() as u32;
+                (0..n).any(|v| {
+                    self.field_types(ty, v)
+                        .iter()
+                        .any(|t| self.type_has(t, seen, hit))
+                })
+            }
+            _ => false,
+        }
+    }
+
     /// Whether something with visibility `vis`, declared in module `at`, can be named in module
     /// `from` (`mod.vis.1`).
     pub fn can_see(&self, vis: Vis, at: u32, from: u32) -> bool {

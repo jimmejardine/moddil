@@ -356,15 +356,30 @@ with Alloc = &frame {
   and the innermost one wins. **There are no `_in(alloc)` constructors**: a value that must use a
   particular allocator is built inside its own `with Alloc = … { … }` block, so there is one way to
   choose an allocator, and no API comes in two versions.
-- **Lifetimes are checked by the borrow rules.** A handler borrowed from an arena lives as long as
-  the `with` block, and what is allocated in the arena is a view tied to it, so it cannot leave the
-  block ([View types](#view-types)); arena allocations cannot become `Rc`s.
+- **A buffer keeps its allocator.** Only making storage uses the allocator in scope; growing,
+  shrinking and freeing go back to the allocator the buffer was made with, which a header before
+  the storage names (in a program that installs an allocator at all). A `Vec` made outside the
+  block and pushed to inside it stays in the default allocator's memory.
+- **Lifetimes are checked by the borrow rules.** What the block may allocate is a view of the
+  allocator ([View types](#view-types)): the result of each call in it that may hold memory, and
+  each place it borrows `&mut` (or borrows shared, if the place has interior mutability), hold the
+  allocator's borrow. So none of it outlives the allocator, leaves the function, or is alive when
+  the allocator is changed or reset. An `Rc` made in the block is such a view too, so it cannot
+  outlive the arena.
+- **What the caller lent stays out of the arena.** In the block, a place reached through a borrow
+  the caller lent (a `&mut self`, a `&mut Vec<String>` parameter) cannot be borrowed `&mut` or
+  given a value that may hold the block's memory: the caller could not see that it now depends
+  on the arena. Change it outside the block, or build the value inside and return it.
+- **Handlers and tasks.** A trait's handler installed outside the block cannot be used in it,
+  since it could keep what the block allocates; a task started in the block allocates from the
+  arena too, so its scope is opened inside the block. Implementing `Alloc` is unsafe code: an
+  allocator gives memory the program writes to.
 - **`#[no_alloc]` is unchanged.** It forbids any call into an allocator, whichever one is in scope
   ([`performance.md`: Hot-path guarantees](performance.md#hot-path-guarantees)); installing an
   arena does not make allocation allowed there.
 - Scratch arenas install themselves the same way
-  ([`stdlib.md`: Scratch arenas](stdlib.md#scratch-arenas)). Not built yet: `with Alloc = …` is
-  P29 in [`roadmap.md`: On the horizon](roadmap.md#on-the-horizon).
+  ([`stdlib.md`: Scratch arenas](stdlib.md#scratch-arenas)). The reference:
+  [The allocator in scope](../reference/2027/alloc.md).
 
 ## Background
 

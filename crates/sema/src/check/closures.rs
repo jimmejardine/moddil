@@ -537,6 +537,20 @@ impl Checker<'_> {
     /// A task may not outlive the handlers it uses (`task.with.1`): one spawned into a scope
     /// whose closure is outside a `with` that installs a handler the task uses is E0610.
     fn check_spawns(&mut self) {
+        let alloc = self.items.lang("Alloc");
+        // The `with Alloc` blocks: a task started in one allocates from its allocator
+        // (`alloc.task.1`).
+        let allocs: Vec<moddil_syntax::TextRange> = self
+            .body
+            .exprs
+            .iter()
+            .filter(|(_, x)| {
+                matches!(&x.kind, ExprKind::With { handlers, .. } if handlers.iter().any(|h| {
+                    matches!(&h.effect, Ty::Dyn(tr, _) if Some(tr.trait_) == alloc)
+                }))
+            })
+            .map(|(_, x)| x.range)
+            .collect();
         for (_, scope, task) in std::mem::take(&mut self.spawns) {
             let ExprKind::Local(l) = self.body.exprs[scope].kind else {
                 continue;
@@ -545,6 +559,20 @@ impl Checker<'_> {
                 continue;
             };
             let at = self.body.exprs[opened].range;
+            let spawned = self.range(task);
+            let within = |r: moddil_syntax::TextRange, x: moddil_syntax::TextRange| {
+                r.start <= x.start && x.end <= r.end
+            };
+            if allocs.iter().any(|&w| within(w, spawned) && !within(w, at)) {
+                self.report(
+                    Code::E0610,
+                    spawned,
+                    "this task is started in a `with Alloc` block and allocates from its \
+                     allocator, but its scope was opened outside the block, so the task could \
+                     outlive the allocator: open the scope inside the block",
+                );
+                continue;
+            }
             let installs: Vec<ExprId> = self
                 .out
                 .captures

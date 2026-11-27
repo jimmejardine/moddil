@@ -2958,7 +2958,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 self.trap(*trap, *range)?;
                 self.b.switch_to_block(ok);
             }
-            Statement::Read(_) | Statement::StorageDead(_) => {}
+            Statement::Read(_) | Statement::StorageDead(_) | Statement::AllocTaint { .. } => {}
             Statement::Observe { range, value } => {
                 let ty = self.operand_ty(value)?;
                 let v = self.operand(value)?;

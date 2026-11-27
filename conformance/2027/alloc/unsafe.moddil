@@ -1,0 +1,13 @@
+// covers: alloc.trait.1
+//
+// An allocator gives memory the program writes to: implementing `Alloc` is unsafe code.
+
+struct Bad;
+
+impl Alloc for Bad {  //~ E0219
+    fn alloc(&self, size: int, align: int) -> *mut u8 with fail(OutOfMemory) {
+        System.alloc(size, align)?
+    }
+
+    fn free(&self, p: *mut u8, size: int, align: int) {}
+}
