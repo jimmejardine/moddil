@@ -32,7 +32,7 @@ pub struct Input {
 /// The pitch limit: just short of straight up or down, where yaw stops meaning anything.
 const MAX_PITCH: f32 = 1.5;
 
-/// Never get closer to the surface than this: ten times the hit threshold's floor
+/// Never get closer to the surface than this: well outside the hit threshold's floor
 /// (`Quality::standard`), so a ray from the camera never starts inside it.
 const MIN_DISTANCE: f32 = 0.0001;
 

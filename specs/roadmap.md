@@ -373,6 +373,13 @@ of an inherent impl may be wrapped (`attr.around.method.1`); one of a trait, or 
 impl, is I0001: its hidden items are keyed by type and method (`__Args_Type_method`), which two
 traits' methods of one name would share, and `Type::method::Args` would not say which trait's.
 
+**P70. Deeper Mandelbulb zoom by perturbation** (`examples/mandelbulb`; L). The flight stops 1e-4
+from the surface, where a pixel is about `f32`'s step near the bulb (2.4e-7): the formula needs
+each point's absolute position, so camera-relative `f32` cannot see finer. Perturbation would: the
+CPU traces a reference orbit at the camera in `f64` (or wider), and the kernel traces each pixel's
+small difference from it in `f32`, as deep-zoom Mandelbrot viewers do; the power-8 step's
+difference formula is the new part. Then `MIN_DISTANCE` can fall by orders of magnitude.
+
 ## Known limits, with no package yet
 - ThreadSanitizer cannot follow tasks yet: on coroutines' stacks it crashes in
   `__tsan_func_entry`, with or without its fiber calls (`__tsan_switch_to_fiber`, tried and left

@@ -15,7 +15,8 @@ pub struct Ray {
 pub struct Quality {
     pub max_steps: int,
     /// A ray this close to the surface has hit it, however near the camera: the threshold's
-    /// floor.
+    /// floor, a step or two of `f32` near the bulb (2.4e-7 within 2 of the origin), finer than
+    /// which a position cannot be told apart.
     pub epsilon: f32,
     /// The angle one pixel spans, in radians (`Camera::pixel`). A ray at distance `t` has hit
     /// the surface within half a pixel's width there, `t · pixel / 2`: detail finer than a pixel
@@ -28,10 +29,11 @@ pub struct Quality {
 impl Quality {
     /// For an image about 1000 pixels tall; a renderer sets `pixel` from its image's height.
     pub fn standard() -> Quality {
-        Quality { max_steps: 128, epsilon: 0.00001, pixel: 0.001, max_distance: 8.0 }
+        Quality { max_steps: 128, epsilon: 0.0000004, pixel: 0.001, max_distance: 8.0 }
     }
 
-    /// How close a ray at distance `t` must come to the surface to hit it.
+    /// How close a ray at distance `t` must come to the surface to hit it: half a pixel's width
+    /// there, and no less than `epsilon`.
     pub fn threshold(&self, t: f32) -> f32 {
         self.epsilon.max(t * self.pixel * 0.5)
     }
@@ -73,6 +75,13 @@ pub fn march(ray: Ray, params: Params, quality: Quality) -> Hit {
     Hit::Miss { steps: steps }
 }
 
+/// The spacing of a normal's samples for a hit within `eps`: no less than four steps of `f32`
+/// near the bulb (whose points are within about 2 of the origin, where `f32` steps by 2.4e-7),
+/// so the gradient is not rounding noise.
+fn normal_step(eps: f32) -> f32 {
+    eps.max(0.000001)
+}
+
 /// The scale of the shading's samples at distance `t` from the camera: 1 from the start's
 /// distance on, smaller nearer, so the shading looks the same at every zoom.
 fn near(t: f32) -> f32 {
@@ -85,7 +94,7 @@ fn near(t: f32) -> f32 {
 pub fn shade(hit: Hit, params: Params, quality: Quality, light: Vec3) -> f32 {
     match hit {
         Hit::Surface { at, steps, eps, .. } => {
-            let n = normal(at, params, eps);
+            let n = normal(at, params, normal_step(eps));
             let diffuse = n
                 .dot(light)
                 .max(0.0);
@@ -160,7 +169,7 @@ pub fn colour(hit: Hit, ray: Ray, params: Params, quality: Quality, light: Vec3)
     let background = sky(ray.dir, light);
     let lit = match hit {
         Hit::Surface { at, origin, planes, t, eps, .. } => {
-            let n = normal(at, params, eps);
+            let n = normal(at, params, normal_step(eps));
             let s = near(t);
             let base = palette(origin * 1.6 + planes.y * 0.8).mix(Vec3::new(0.95, 0.80, 0.55), (1.0 - planes.x * 4.0).clamp(0.0, 1.0) * 0.35);
             let ao = occlusion(at, n, params, s);
