@@ -146,17 +146,28 @@ runners; M each)
   (`stdlib.md`: Scratch arenas).
 - Running out of room: growth traps today (`alloc.oom.1`); in freestanding profiles it should fail
   with `OutOfMemory` to the caller (`freestanding.md`).
-- `Scratch::scope` gives nothing back, as a closure's result could borrow the arena: a bound for
-  "holds no borrow" would let it return a value made outside the arena.
+- A bound for "holds no borrow", so `Scratch::scope` can return a value made outside the arena.
 - A trait's handler from outside a `with Alloc` block (E0613) allowed when its trait promises not
   to keep what it is given (a marker trait).
 - An arena that grows its last allocation in place, rather than copying it (`__heap_realloc`
   always moves).
 - The header: in a program that installs an allocator anywhere, every allocation carries one,
   the default's included; a table of the arenas' address ranges would spare the default ones.
-- The interpreters ask allocators for 8 bytes an element, not the elements' sizes, and the
-  reference interpreter has no raw pointers, so `mods/alloc` runs natively, in WASM and on the MIR
-  interpreter only.
+- The interpreters ask allocators for 8 bytes an element, not the elements' sizes.
+- Decisions to revisit:
+  - In a `with Alloc` block, every place borrowed `&mut` whose type may own heap memory holds
+    the allocator's loan, not only types like `Vec<String>`: a call given `&mut v` of a
+    `Vec<int>` could replace it with arena memory (`*v = Vec::new()`). So pushing onto an outer
+    `Vec<int>` in the block is allowed, but the `Vec` then cannot outlive the arena, and a place
+    the caller lent cannot be changed there at all (E0317).
+  - `Scratch::scope` gives nothing back (a generic result could borrow the arena, and no bound
+    says it does not): a frame's results leave through what its closure captures, changed
+    outside its `with Alloc` block.
+  - `mods/alloc` is not run by the reference interpreter, which has no raw pointers
+    (`core::ptr`); giving it them would let it cross-check the arena.
+  - While an allocator's own `alloc` or `free` runs, the default allocator is in scope
+    (`alloc.self.1`), not the one below it in the stack: popping and re-pushing breaks when the
+    buffer's allocator is not the innermost one.
 
 **P30. Exact decimal literals, `f16` and `bf16`** (`crates/sema`, `crates/mir`, the runners; L)
 - A decimal literal coerces to `Fixed<S>` exactly, or is an error (`numerics.md`: Exact literals).
