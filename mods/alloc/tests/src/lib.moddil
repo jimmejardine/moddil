@@ -1,0 +1,97 @@
+use alloc::{Arena, Scratch};
+
+test "what a block allocates comes from the arena" {
+    let a = Arena::new(1024);
+    let n = with Alloc = &a {
+        let mut v: Vec<int> = Vec::new();
+        for i in 0..10 {
+            v.push(i);
+        }
+        v.len()
+    };
+    assert(n == 10);
+    assert(a.allocs() > 0);
+    assert(a.used() > 0);
+    assert(a.blocks() == 1);
+}
+
+test "a full block chains another" {
+    let a = Arena::new(64);
+    with Alloc = &a {
+        let v: Vec<int> = Vec::with_capacity(100);
+        let w: Vec<int> = Vec::with_capacity(100);
+        assert(v.capacity() + w.capacity() == 200);
+    }
+    assert(a.blocks() >= 2);
+}
+
+test "reset gives everything back and keeps one block" {
+    let mut a = Arena::new(64);
+    with Alloc = &a {
+        let v: Vec<int> = Vec::with_capacity(100);
+        assert(v.capacity() == 100);
+    }
+    a.reset();
+    assert(a.used() == 0);
+    assert(a.allocs() == 0);
+    assert(a.blocks() == 1);
+}
+
+test "a vector made outside keeps growing outside the arena" {
+    let a = Arena::new(1024);
+    let mut v: Vec<int> = Vec::new();
+    with Alloc = &a {
+        for i in 0..100 {
+            v.push(i);
+        }
+    }
+    assert(v.len() == 100);
+    assert(a.allocs() == 0);
+}
+
+test "text made in the arena is read there" {
+    let a = Arena::new(1024);
+    let n = with Alloc = &a {
+        let s = "a line long enough to be kept on the heap, not inline".to_string();
+        let t = s.to_uppercase();
+        t.len()
+    };
+    assert(n == 53);
+    assert(a.allocs() >= 2);
+}
+
+test "a scratch arena is reset after each scope" {
+    let mut s = Scratch::with_capacity(256);
+    let mut total = 0;
+    for frame in 0..3 {
+        let mut seen = 0;
+        s.scope(|tmp| {
+            let n = with Alloc = tmp {
+                let mut visible: Vec<int> = Vec::new();
+                for i in 0.. (frame + 1) * 10 {
+                    visible.push(i);
+                }
+                visible.len()
+            };
+            seen = n;
+        });
+        assert(s.used() == 0);
+        total += seen;
+    }
+    assert(total == 60);
+}
+
+test "a task started in the block allocates from the arena" {
+    let a = Arena::new(1024);
+    let n = with Alloc = &a {
+        scope(|s| {
+            let t = s.spawn (|| {
+                let v: Vec<int> = [1, 2, 3];
+                v.len()
+            });
+            t.join()
+        })
+    };
+    assert(n == 3);
+    assert(a.allocs() > 0);
+}

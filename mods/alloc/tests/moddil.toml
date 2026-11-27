@@ -1,0 +1,6 @@
+[mod]
+name = "alloc_tests"
+edition = "2027"
+
+[dependencies]
+alloc = { path = ".." }

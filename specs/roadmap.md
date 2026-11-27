@@ -150,10 +150,23 @@ L)
   for duplication, dead paths and limits missing from this list; fix what is small, and add the
   rest here as packages.
 
-**P29. The allocator in scope** (prelude, `crates/sema`, `crates/mir`, `crates/rt`; L)
-- `with Alloc = a { … }` (`memory.md`: The allocator in scope): `.to_rc()` and growing
-  collections allocate from the innermost installed allocator, the profile's default otherwise;
-  no `_in` constructors. `Scratch` in `moddil/alloc` installs itself the same way (`stdlib.md`).
+**P29. The allocator in scope, what is left** (`mods/alloc`, `crates/sema`, `crates/mir`, the
+runners; M each)
+- `Scratch` in debug builds: poison reset memory and report each scope's high-water mark
+  (`stdlib.md`: Scratch arenas).
+- Running out of room: growth traps today (`alloc.oom.1`); in freestanding profiles it should fail
+  with `OutOfMemory` to the caller (`freestanding.md`).
+- `Scratch::scope` gives nothing back, as a closure's result could borrow the arena: a bound for
+  "holds no borrow" would let it return a value made outside the arena.
+- A trait's handler from outside a `with Alloc` block (E0613) allowed when its trait promises not
+  to keep what it is given (a marker trait).
+- An arena that grows its last allocation in place, rather than copying it (`__heap_realloc`
+  always moves).
+- The header: in a program that installs an allocator anywhere, every allocation carries one,
+  the default's included; a table of the arenas' address ranges would spare the default ones.
+- The interpreters ask allocators for 8 bytes an element, not the elements' sizes, and the
+  reference interpreter has no raw pointers, so `mods/alloc` runs natively, in WASM and on the MIR
+  interpreter only.
 
 **P30. Exact decimal literals, `f16` and `bf16`** (`crates/sema`, `crates/mir`, the runners; L)
 - A decimal literal coerces to `Fixed<S>` exactly, or is an error (`numerics.md`: Exact literals).
