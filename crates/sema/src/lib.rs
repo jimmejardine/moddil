@@ -37,6 +37,7 @@ mod modules;
 mod resolve;
 mod traits;
 mod ty;
+pub mod units;
 mod validate;
 mod wrap;
 
@@ -44,7 +45,7 @@ pub use check::{
     ArgSlot, Callee, Capture, CaptureMode, Effects, Evidence, FnEffects, Inference, Propagated,
     effects, infer, tuple_positions,
 };
-pub use collect::{item_tree, parse};
+pub use collect::{item_tree, parse, typed_item_tree};
 pub use db::{
     Database, Db, Evaluator, FileId, Item, ModInfo, Owner, Program, ProgramFile, SourceFile,
     TagAnswer, TagRequest,

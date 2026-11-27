@@ -55,7 +55,7 @@ impl<'db> Query<'db> {
             db,
             program,
             file,
-            items: moddil_sema::item_tree(db, program),
+            items: moddil_sema::typed_item_tree(db, program),
         }
     }
 
@@ -241,6 +241,14 @@ impl<'db> Query<'db> {
                     .file
                     .map(|f| Place::File(f, TextRange::new(0, 0)));
             }
+            Def::Dimension(d) => (
+                items.dimensions[d as usize].src,
+                items.dimensions[d as usize].name_range,
+            ),
+            Def::Unit(u) => (
+                items.units[u as usize].src,
+                items.units[u as usize].name_range,
+            ),
         };
         Place::of(src, range)
     }
@@ -356,6 +364,11 @@ impl<'db> Query<'db> {
                 code(format!("{}::{}", adt.name, adt.variants[v as usize].name))
             }
             Def::Module(m) => code(format!("mod {}", self.items.module_path(m))),
+            Def::Dimension(d) => code(format!(
+                "dimension {}",
+                self.items.dimensions[d as usize].name
+            )),
+            Def::Unit(u) => code(format!("unit {}", self.items.units[u as usize].name)),
         }
     }
 
@@ -514,7 +527,7 @@ pub(crate) fn strip(t: &Ty) -> Ty {
 
 /// Function `f`'s signature, as [`Query::signature`].
 pub(crate) fn signature(db: &dyn Db, program: Program, f: u32) -> String {
-    let items = moddil_sema::item_tree(db, program);
+    let items = moddil_sema::typed_item_tree(db, program);
     let s = &items.fns[f as usize];
     let owner = match s.container {
         Container::Impl(k) => format!("{}::", items.impls[k as usize].self_ty),

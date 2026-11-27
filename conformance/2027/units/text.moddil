@@ -1,0 +1,41 @@
+// covers: unit.fmt.1, unit.parse.1
+
+dimension Length;
+dimension Temperature;
+
+unit m: Length;
+unit mm = m / 1000;
+unit cm = m / 100;
+unit km = 1000 * m;
+unit K: Temperature;
+unit degC = K + 273.15;
+
+test "a quantity is written in the unit its spec names" {
+    let length = 1.25[m];
+    fmt"{length:[mm]}"  // => "1250.0 mm"
+    ;
+    fmt"{length:.2[km]}"  // => "0.00 km"
+    ;
+    fmt"{length}"  // => "1.25"
+}
+
+test "a point is written in another unit with its offset" {
+    let t = 300.0[K];
+    fmt"{t:.2[degC]}"  // => "26.85 degC"
+}
+
+test "text is read as a quantity in any unit of its dimension" {
+    "12.5 km".parse_quantity::<f64[m]>()  // => Ok(12500.0)
+    ;
+    "250cm".parse_quantity::<f64[m]>()  // => Ok(2.5)
+    ;
+    "3 m".parse_quantity::<int[cm]>()  // => Ok(300)
+    ;
+    "20 degC".parse_quantity::<f64[K]>()  // => Ok(293.15)
+}
+
+test "text of another dimension or without a unit is an error" {
+    "12.5 s".parse_quantity::<f64[m]>().is_err()  // => true
+    ;
+    "12.5".parse_quantity::<f64[m]>().is_err()  // => true
+}

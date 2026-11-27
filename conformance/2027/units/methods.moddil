@@ -1,0 +1,56 @@
+// covers: unit.method.1, unit.method.2, unit.to.1, unit.with.1, unit.angle.1, unit.angle.2, unit.trait.1
+
+dimension Length;
+dimension Time;
+
+unit m: Length;
+unit cm = m / 100;
+unit km = 1000 * m;
+unit s: Time;
+unit deg = rad * 0.017453292519943295;
+
+test "to_unit and value_in" {
+    2.5[m].value_in::<cm>()  // => 250.0
+    ;
+    let x: f64[cm] = 2.5[m].to_unit::<cm>();
+    x  // => 250.0
+}
+
+test "an integer converts with a rounding mode" {
+    250[cm].to_unit::<m>(Round::NearestEven)  // => 2
+    ;
+    349[cm].to_unit::<m>(Round::Down)  // => 3
+    ;
+    351[cm].to_unit::<m>(Round::Up)  // => 4
+}
+
+test "methods that keep the unit" {
+    let e = (-3.0[m]).abs().max(1.0[km]);
+    e.value_in::<m>()  // => 1000.0
+}
+
+test "a square root halves the unit" {
+    9.0[m^2].sqrt().value_in::<m>()  // => 3.0
+    ;
+    let a: f64[m^2] = 3.0[m].powi(2);
+    a  // => 9.0
+}
+
+test "sines take angles in any unit" {
+    90.0[deg].sin()  // => 1.0
+    ;
+    0.0[rad].cos()  // => 1.0
+}
+
+test "per_radian drops the angle" {
+    let w: f64[s^-1] = (180.0[deg] / 2.0[s]).per_radian();
+    w > 1.57[s^-1]  // => true
+}
+
+test "a quantity has its number's traits" {
+    let x = 2.0[m];
+    let y = x;
+    x == y  // => true
+    ;
+    x.clone() < 3.0[m]  // => true
+}

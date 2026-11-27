@@ -29,7 +29,7 @@ pub struct Explained {
 /// piece comes from.
 pub fn explain(db: &dyn Db, program: Program) -> Vec<Explained> {
     let (expansion, _) = crate::collect::derived(db, program);
-    let tree = crate::collect::item_tree(db, program);
+    let tree = crate::collect::typed_item_tree(db, program);
     let mut out = Vec::new();
     for (range, src, origin) in &expansion.origins {
         let Src::File(f) = *src else {

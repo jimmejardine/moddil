@@ -22,6 +22,7 @@ behaviour are as written there. The files are one source, joined in this order:
 | [`concurrency.moddil`](prelude/concurrency.moddil) | scopes and tasks, channels, `Duration` and timers |
 | [`derives.moddil`](prelude/derives.moddil) | the templates `#[derive]` instantiates for `Clone`, `PartialEq`, `PartialOrd`, `Ord`, `Hash`, `Debug` and `Default` (**attr.derive.1**) |
 | [`alloc.moddil`](prelude/alloc.moddil) | `Alloc`, `OutOfMemory` and `System`, and how storage is made from the allocator in scope ([The allocator in scope](alloc.md)) |
+| [`units.moddil`](prelude/units.moddil) | the dimension `Angle` and its unit `rad` (**unit.angle.1**), and the rounding of an integer quantity's conversion ([Units of measure](units.md)) |
 
 **prelude.1** The prelude holds `assert` ([`assert`](expressions/assert.md)), `unreachable` and
 `todo` ([`unreachable` and `todo`](expressions/unreachable.md)) and `discard` ([Errors](errors.md)), the types `Option`, `Result` and `Ordering`, the traits `Clone`, `Copy`,

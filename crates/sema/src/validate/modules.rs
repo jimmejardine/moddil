@@ -173,6 +173,11 @@ impl ItemTree {
             Def::Trait(t) => (self.traits[t as usize].vis, self.traits[t as usize].module),
             Def::Type(t) => (self.types[t as usize].vis, self.types[t as usize].module),
             Def::Module(m) => (Vis::Pub, m),
+            Def::Dimension(d) => (
+                self.dimensions[d as usize].vis,
+                self.dimensions[d as usize].module,
+            ),
+            Def::Unit(u) => (self.units[u as usize].vis, self.units[u as usize].module),
         };
         let name = self.def_name(def);
         let why = match vis {

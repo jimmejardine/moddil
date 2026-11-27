@@ -321,9 +321,26 @@ impl Lowerer<'_> {
 
     pub(super) fn literal(&mut self, node: &SyntaxNode, negate: bool) -> ExprId {
         let range = node.text_range();
-        if node.child(K::UNIT_SUFFIX).is_some() {
-            return self.unsupported(range, "a unit of measure");
+        // `100[cm]`: the number, with its unit beside it (`unit.lit.1`).
+        if let Some(suffix) = node.child(K::UNIT_SUFFIX) {
+            let mut ds = Vec::new();
+            let unit = crate::resolve::resolve_unit(&suffix, &self.types, &mut ds);
+            self.out.diagnostics.extend(ds);
+            let e = self.number_literal(node, negate);
+            return match unit {
+                Some(u) if !u.is_one() => {
+                    self.out.body.units.insert(e, u);
+                    e
+                }
+                Some(_) => e,
+                None => self.missing(range),
+            };
         }
+        self.number_literal(node, negate)
+    }
+
+    fn number_literal(&mut self, node: &SyntaxNode, negate: bool) -> ExprId {
+        let range = node.text_range();
         let Some(tok) = node.child_tokens().find(|t| !t.kind().is_trivia()) else {
             return self.missing(range);
         };
@@ -1126,11 +1143,15 @@ impl Lowerer<'_> {
             return self.unsupported(op.text_range(), &format!("`{}`", op.text()));
         };
         let (l, r) = self.operands(e, range);
-        // Literals, folded exactly (`num.lit.1`).
-        if let (Some(a), Some(b)) = (
-            super::fold::Exact::of(&self.out.body.exprs[l].kind),
-            super::fold::Exact::of(&self.out.body.exprs[r].kind),
-        ) && let Some(v) = super::fold::fold(op, a, b)
+        // Literals, folded exactly (`num.lit.1`); not those with units, whose arithmetic is their
+        // units' too (`unit.lit.1`).
+        if !self.out.body.units.contains_key(&l)
+            && !self.out.body.units.contains_key(&r)
+            && let (Some(a), Some(b)) = (
+                super::fold::Exact::of(&self.out.body.exprs[l].kind),
+                super::fold::Exact::of(&self.out.body.exprs[r].kind),
+            )
+            && let Some(v) = super::fold::fold(op, a, b)
         {
             return self.alloc(v.literal(), range);
         }

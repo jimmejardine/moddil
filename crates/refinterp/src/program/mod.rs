@@ -6,7 +6,7 @@
 //! says what a path names in a module (`modules.md`), and [`dispatch`] which method a value's
 //! kind gets.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode};
@@ -214,6 +214,13 @@ pub(crate) struct Program {
     pub(crate) consts: HashMap<String, (ast::Expr, usize)>,
     /// The `type` items, by key (`refine.1`).
     pub(crate) types: HashMap<String, TypeInfo>,
+    /// The `unit` and `dimension` items, by key (`unit.decl.1`), with their modules; the units
+    /// in the order they are declared.
+    pub(crate) unit_items: HashMap<String, (SyntaxNode, usize)>,
+    pub(crate) dim_items: HashMap<String, (SyntaxNode, usize)>,
+    pub(crate) unit_order: Vec<String>,
+    /// What each unit is, worked out the first time it is asked.
+    unit_infos: std::sync::Mutex<HashMap<String, crate::units::UnitInfo>>,
     /// Each file's module path.
     file_paths: Vec<Vec<String>>,
     /// The syntax trees: the prelude's, `core`'s, then each file's.
@@ -241,6 +248,10 @@ impl Program {
             fns: HashMap::new(),
             consts: HashMap::new(),
             types: HashMap::new(),
+            unit_items: HashMap::new(),
+            dim_items: HashMap::new(),
+            unit_order: Vec::new(),
+            unit_infos: std::sync::Mutex::new(HashMap::new()),
             adts: HashMap::new(),
             traits: HashMap::new(),
             impls: Vec::new(),
@@ -624,6 +635,20 @@ impl Program {
                         module,
                     },
                 );
+            }
+            // `unit m: Length;`, `dimension Length;` (`unit.decl.1`, `unit.dim.1`).
+            K::UNIT_ITEM => {
+                let name = name_of(&item);
+                let key = Program::key(module, &name);
+                self.declare(module, &name, Def::Item(key.clone()));
+                self.unit_order.push(key.clone());
+                self.unit_items.insert(key, (item, module));
+            }
+            K::DIMENSION_ITEM => {
+                let name = name_of(&item);
+                let key = Program::key(module, &name);
+                self.declare(module, &name, Def::Item(key.clone()));
+                self.dim_items.insert(key, (item, module));
             }
             // `const NAME: T = e;` (`comptime.const.1`).
             K::CONST_ITEM => {
@@ -1049,6 +1074,8 @@ impl Program {
             }
             Value::Ref(..) => unreachable!("a borrow is shown by the machine"),
             Value::Moved => "<moved>".to_string(),
+            // A quantity shows as its number (`unit.erase.1`).
+            Value::Quantity(v, _) => part(v),
             Value::Closure(_) => "{closure}".to_string(),
             Value::Anon(..) => "{impl}".to_string(),
             Value::Alias(_) => unreachable!("an alias is followed"),
@@ -1431,4 +1458,170 @@ fn member_consts(body: Option<SyntaxNode>) -> HashMap<String, ast::Expr> {
         .filter(|c| c.kind() == K::CONST_ITEM)
         .filter_map(|c| Some((name_of(&c), c.children().find_map(ast::Expr::cast)?)))
         .collect()
+}
+
+impl Program {
+    /// The key of what `path` names in `module`, if it is one of `items`.
+    fn unit_key(
+        &self,
+        module: usize,
+        node: &SyntaxNode,
+        items: &HashMap<String, (SyntaxNode, usize)>,
+    ) -> Option<String> {
+        let path = crate::units::atom_path(node);
+        match self.resolve(module, &path) {
+            Some((Def::Item(k), _)) if items.contains_key(&k) => Some(k),
+            _ => None,
+        }
+    }
+
+    /// Dimension `key`'s base dimensions and powers.
+    fn dim_info(&self, key: &str) -> BTreeMap<String, crate::units::Ratio> {
+        let Some((node, module)) = self.dim_items.get(key).cloned() else {
+            return BTreeMap::new();
+        };
+        let expr = node.children().find(|c| is_unit_expr(c.kind()));
+        match expr {
+            None => BTreeMap::from([(key.to_string(), crate::units::Ratio::ONE)]),
+            Some(e) => {
+                crate::units::walk::<(BTreeMap<String, crate::units::Ratio>, crate::units::Sc)>(
+                    &e,
+                    &mut |a| match self.unit_key(module, a, &self.dim_items) {
+                        Some(k) => (
+                            self.dim_info(&k),
+                            crate::units::Sc::Exact(crate::units::Ratio::ONE),
+                        ),
+                        None => (
+                            BTreeMap::new(),
+                            crate::units::Sc::Exact(crate::units::Ratio::ONE),
+                        ),
+                    },
+                )
+                .0
+            }
+        }
+    }
+
+    fn compute_unit(&self, key: &str) -> crate::units::UnitInfo {
+        use crate::units::{Ratio, Sc, UnitInfo};
+        let Some((node, module)) = self.unit_items.get(key).cloned() else {
+            return UnitInfo {
+                dims: BTreeMap::new(),
+                scale: Sc::Exact(Ratio::ONE),
+                offset: None,
+            };
+        };
+        if node.token(K::COLON).is_some() {
+            let dims = node
+                .child(K::PATH_TYPE)
+                .and_then(|p| self.unit_key(module, &p, &self.dim_items))
+                .map(|k| self.dim_info(&k))
+                .unwrap_or_default();
+            return UnitInfo {
+                dims,
+                scale: Sc::Exact(Ratio::ONE),
+                offset: None,
+            };
+        }
+        let def = node.child(K::UNIT_DEF).expect("a checked unit");
+        let expr = def
+            .children()
+            .find(|c| is_unit_expr(c.kind()))
+            .expect("a checked unit");
+        let (dims, scale) = crate::units::walk::<(BTreeMap<String, Ratio>, Sc)>(&expr, &mut |a| {
+            if a.kind() == K::LITERAL {
+                let t = a
+                    .child_tokens()
+                    .find(|t| !t.kind().is_trivia())
+                    .expect("a number");
+                return (
+                    BTreeMap::new(),
+                    Sc::Exact(crate::units::decimal(t.text()).expect("a checked number")),
+                );
+            }
+            let k = self
+                .unit_key(module, a, &self.unit_items)
+                .expect("a checked unit");
+            let i = self.unit_info(&k);
+            (i.dims, i.scale)
+        });
+        let sign = def
+            .child_tokens()
+            .find(|t| matches!(t.kind(), K::PLUS | K::MINUS));
+        let num = def
+            .child_tokens()
+            .find(|t| matches!(t.kind(), K::INTEGER | K::FLOAT));
+        let offset = match (sign, num) {
+            (Some(sign), Some(num)) => {
+                let r = crate::units::decimal(num.text()).expect("a checked offset");
+                let o = mul_sc(Sc::Exact(r), scale);
+                Some(if sign.kind() == K::MINUS {
+                    neg_sc(o)
+                } else {
+                    o
+                })
+            }
+            _ => None,
+        };
+        UnitInfo {
+            dims,
+            scale,
+            offset,
+        }
+    }
+
+    /// Unit `key`: its dimension, scale and offset.
+    pub(crate) fn unit_info(&self, key: &str) -> crate::units::UnitInfo {
+        if let Some(i) = self
+            .unit_infos
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(key)
+        {
+            return i.clone();
+        }
+        let i = self.compute_unit(key);
+        self.unit_infos
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(key.to_string(), i.clone());
+        i
+    }
+
+    /// The unit key `path` (a unit atom) names in `module`, if it names a unit.
+    pub(crate) fn unit_named(&self, module: usize, node: &SyntaxNode) -> Option<String> {
+        self.unit_key(module, node, &self.unit_items)
+    }
+}
+
+fn mul_sc(a: crate::units::Sc, b: crate::units::Sc) -> crate::units::Sc {
+    use crate::units::Prod;
+    let (_, s) = (BTreeMap::new(), a).mul_pow((BTreeMap::new(), b), crate::units::Ratio::ONE);
+    s
+}
+
+fn neg_sc(a: crate::units::Sc) -> crate::units::Sc {
+    match a {
+        crate::units::Sc::Exact(r) => {
+            crate::units::Sc::Exact(crate::units::Ratio { n: -r.n, d: r.d })
+        }
+        crate::units::Sc::Approx(x) => crate::units::Sc::Approx(-x),
+    }
+}
+
+fn is_unit_expr(k: K) -> bool {
+    matches!(
+        k,
+        K::UNIT_BIN | K::UNIT_POWER | K::UNIT_PAREN | K::PATH_TYPE | K::LITERAL
+    )
+}
+
+impl crate::units::Units for Program {
+    fn info(&self, key: &str) -> crate::units::UnitInfo {
+        self.unit_info(key)
+    }
+
+    fn order(&self) -> Vec<String> {
+        self.unit_order.clone()
+    }
 }

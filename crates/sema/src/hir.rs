@@ -94,6 +94,9 @@ pub struct Body {
     /// Each tagged literal's `const { }` block (`comptime.tag.1`): where the text its tag was
     /// given is in the file, for an error compile-time code reports in it (`compile_error`).
     pub tagged: std::collections::BTreeMap<ExprId, TagText>,
+    /// The unit each number literal written with one has (`unit.lit.1`): `100[cm]` is the
+    /// literal `100`, and this records `cm`.
+    pub units: std::collections::BTreeMap<ExprId, crate::units::UnitTy>,
     /// Each wrapper's compile-time argument, a `const { }` block (`attr.around.args.1`): computed
     /// once, when compiling, in a generic function too, for it names none of its parameters.
     pub wrapper_args: std::collections::BTreeSet<ExprId>,
@@ -466,6 +469,8 @@ pub struct Spec {
     pub width_arg: Option<ExprId>,
     /// `.name$`: the precision, an `int` named in the hole's scope.
     pub precision_arg: Option<ExprId>,
+    /// `[mm]`: the unit a quantity is written in, and its name as written (`unit.fmt.1`).
+    pub unit: Option<(crate::units::UnitTy, String)>,
 }
 
 impl Spec {

@@ -333,6 +333,15 @@ impl Checker<'_> {
     ) -> Ty {
         let range = self.range(e);
         let rt = self.infer(receiver);
+        // A quantity's methods (`unit.method.1`), and text read as one (`unit.parse.1`).
+        if name == "parse_quantity"
+            && let Some(t) = self.parse_quantity(e, &rt, name_range, given, args)
+        {
+            return t;
+        }
+        if let Some(t) = self.quantity_method(e, receiver, &rt, name, name_range, given, args) {
+            return t;
+        }
         // A literal whose type nothing else gives yet has its default here (`num.lit.1`).
         self.solver.table.default_literal(&rt);
         let r = self.norm(&rt);

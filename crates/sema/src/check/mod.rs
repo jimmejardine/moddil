@@ -13,7 +13,6 @@ use std::collections::{HashMap, HashSet};
 use la_arena::RawIdx;
 use moddil_syntax::TextRange;
 
-use crate::collect::item_tree;
 use crate::hir::{Body, ExprId, ExprKind, LocalId, PatId};
 use crate::lower::body;
 use crate::traits::{Adjust, Solver};
@@ -30,6 +29,7 @@ mod finish;
 mod needs;
 mod operators;
 mod patterns;
+mod units;
 
 pub use closures::{Capture, CaptureMode};
 use errors::FailCx;
@@ -105,6 +105,17 @@ impl Callee {
 /// operators run, and the type errors found.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct Inference {
+    /// The unit conversions of expressions (`unit.conv.1`): each one's value, converted.
+    unit_convs: HashMap<ExprId, crate::units::UnitConv>,
+    /// The method calls on quantities that are their receiver's value (`to_unit`, `value_in`,
+    /// `with_unit`, `per_radian`; `unit.to.1`), and whether it is read through a borrow.
+    unit_passthrough: HashMap<ExprId, bool>,
+    /// The `to_unit::<u>(mode)` calls on `int` quantities (`unit.to.1`): the factor, a ratio
+    /// `n / d`, and whether the receiver is read through a borrow.
+    unit_rescales: HashMap<ExprId, (i128, i128, bool)>,
+    /// The `parse_quantity` calls (`unit.parse.1`): the table of the units they read, and
+    /// whether the quantity is an `int`.
+    unit_parses: HashMap<ExprId, (String, bool)>,
     expr_types: Vec<Ty>,
     pat_types: Vec<Ty>,
     local_types: Vec<Ty>,
@@ -236,6 +247,29 @@ impl Inference {
         self.wrapped.get(&e)
     }
 
+    /// The conversion of `e`'s value to another unit, if it is converted (`unit.conv.1`).
+    pub fn unit_conv(&self, e: ExprId) -> Option<&crate::units::UnitConv> {
+        self.unit_convs.get(&e)
+    }
+
+    /// For a method call on a quantity whose value is its receiver's (`unit.to.1`): whether the
+    /// receiver is read through a borrow.
+    pub fn unit_passthrough(&self, e: ExprId) -> Option<bool> {
+        self.unit_passthrough.get(&e).copied()
+    }
+
+    /// For `s.parse_quantity::<q>()` (`unit.parse.1`): the table of the units it reads, and
+    /// whether the quantity is an `int`.
+    pub fn unit_parse(&self, e: ExprId) -> Option<&(String, bool)> {
+        self.unit_parses.get(&e)
+    }
+
+    /// For `x.to_unit::<u>(mode)` on an `int` quantity (`unit.to.1`): its factor `n / d`, and
+    /// whether `x` is read through a borrow.
+    pub fn unit_rescale(&self, e: ExprId) -> Option<(i128, i128, bool)> {
+        self.unit_rescales.get(&e).copied()
+    }
+
     /// For a hole of `fmt"…"`: the `Display::fmt` it calls.
     pub fn fmt_callee(&self, hole: ExprId) -> Option<&Callee> {
         self.fmt_calls.get(&hole)
@@ -303,6 +337,19 @@ impl Inference {
     /// For a function whose result type is `impl Trait`: the type its body gives.
     pub fn hidden(&self) -> Option<&Ty> {
         self.hidden.as_ref()
+    }
+
+    /// Whether a type recorded has a unit in it, which MIR erases (`unit.erase.1`).
+    pub fn has_units(&self) -> bool {
+        self.expr_types
+            .iter()
+            .chain(&self.pat_types)
+            .chain(&self.local_types)
+            .any(Ty::has_units)
+            || self
+                .calls
+                .values()
+                .any(|c| c.args().iter().any(Ty::has_units))
     }
 
     /// The inference with `f` applied to every type it records, as the MIR is built with the
@@ -430,7 +477,7 @@ fn known_consts(db: &dyn Db, program: crate::Program, items: &ItemTree) -> HashM
 
 pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) -> Inference {
     let lowered = body(db, owner);
-    let items = item_tree(db, owner.program(db));
+    let items = crate::typed_item_tree(db, owner.program(db));
     let body = &lowered.body;
     let (ret, ret_range, is_test, preds) = match owner.item(db) {
         Item::Fn(i) => {
@@ -531,6 +578,8 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         sig_hint: None,
         anon_fails: Vec::new(),
         literals: Vec::new(),
+        unit_pending: Vec::new(),
+        sum_target: None,
         out: Inference {
             expr_types: vec![Ty::Error; body.exprs.len()],
             pat_types: vec![Ty::Error; body.pats.len()],
@@ -618,7 +667,11 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         }
         let t = cx.infer(root);
         // A test's final value is observed, not returned, so it may have any type.
-        if !is_test && !cx.unsize(root, &t, &ret) && !cx.coerce(&t, &ret) {
+        if !is_test
+            && !cx.unsize(root, &t, &ret)
+            && !cx.unit_coercion(root, &t, &ret)
+            && !cx.coerce(&t, &ret)
+        {
             let at = match &body.exprs[root].kind {
                 ExprKind::Block {
                     tail: Some(tail), ..
@@ -626,8 +679,15 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
                 _ => body.exprs[root].range,
             };
             let t = cx.show(&t);
+            // Of another dimension (`unit.conv.3`).
+            let units = matches!(t, Ty::Quantity(..)) || matches!(ret, Ty::Quantity(..));
+            let code = if units && cx.solver.can_unify(&t.split_unit().0, &ret.split_unit().0) {
+                Code::E0224
+            } else {
+                Code::E0201
+            };
             let mut d = Diagnostic::error(
-                Code::E0201,
+                code,
                 at,
                 format!("expected `{ret}` because of the return type, found `{t}`"),
             );
@@ -873,6 +933,11 @@ struct Checker<'a> {
     /// The integer literals, with their values, to check against the types they get
     /// (`num.lit.1`).
     literals: Vec<(ExprId, moddil_syntax::ast::IntValue)>,
+    /// The unit conversions found (`unit.conv.1`), whose factors are known once the units are.
+    unit_pending: Vec<units::Pending>,
+    /// A sum or difference checked against a quantity type, and that type's unit, which its
+    /// operands are converted to (`unit.op.add.1`).
+    sum_target: Option<(ExprId, crate::units::UnitTy)>,
     /// The locals declared without a value (`let x;`), which `=` gives one even if they are not
     /// `mut`: the borrow checker sees that it does so once (`stmt.let.uninit.1`).
     late: HashSet<LocalId>,
@@ -909,6 +974,32 @@ impl Checker<'_> {
             Ty::Infer(Ty::HOLE) => self.fresh(),
             t => t.map(&mut |x| self.instantiate(x)),
         }
+    }
+
+    /// A mismatch, as E0224 if a type is a quantity and the other has the same base: of
+    /// another dimension.
+    fn unit_mismatch(&mut self, e: ExprId, expected: &Ty, found: &Ty) {
+        let (x, f) = (self.show(expected), self.show(found));
+        let units = matches!(x, Ty::Quantity(..)) || matches!(f, Ty::Quantity(..));
+        let same_base = self.solver.can_unify(&x.split_unit().0, &f.split_unit().0);
+        if units && same_base {
+            let range = self.range(e);
+            let hint = if matches!(f, Ty::Quantity(..)) {
+                String::new()
+            } else {
+                format!(
+                    ": a number with a unit is written with it, `1[{:?}]`",
+                    x.split_unit().1
+                )
+            };
+            self.report(
+                Code::E0224,
+                range,
+                format!("expected `{x}`, found `{f}`, of another dimension{hint}"),
+            );
+            return;
+        }
+        self.mismatch(e, expected, found);
     }
 
     fn mismatch(&mut self, e: ExprId, expected: &Ty, found: &Ty) {
@@ -994,13 +1085,23 @@ impl Checker<'_> {
         if let Some(t) = self.wrapped_literal(e, expected) {
             return t;
         }
+        // A sum wanted in a unit has its operands converted to it (`unit.op.add.1`).
+        if let ExprKind::Binary(crate::hir::BinaryOp::Add | crate::hir::BinaryOp::Sub, ..) =
+            self.body.exprs[e].kind
+            && let Ty::Quantity(_, u) = self.norm(expected)
+        {
+            self.sum_target = Some((e, u));
+        }
         let t = self.infer(e);
         self.unsized_value(e);
         if self.fn_pointer(e, expected) {
             return t;
         }
-        if !self.unsize(e, &t, expected) && !self.coerce(&t, expected) {
-            self.mismatch(e, expected, &t);
+        if !self.unsize(e, &t, expected)
+            && !self.unit_coercion(e, &t, expected)
+            && !self.coerce(&t, expected)
+        {
+            self.unit_mismatch(e, expected, &t);
         }
         t
     }
@@ -1207,6 +1308,7 @@ impl Checker<'_> {
             self.out.diagnostics.push(d);
         }
         self.out.resolve_all(&mut self.solver);
+        self.finish_unit_convs();
         self.check_literals();
         self.meet_needs();
         self.check_runtime_installs();
@@ -1233,7 +1335,7 @@ impl Checker<'_> {
     fn check_literals(&mut self) {
         for (e, v) in std::mem::take(&mut self.literals) {
             let t = self.out.expr_types[index(e)].clone();
-            let t = self.items.base(&t);
+            let t = self.items.base(&t.split_unit().0);
             let (lo, hi, name) = match &t {
                 Ty::Int => (i128::from(i64::MIN), i64::MAX as u128, "int".to_string()),
                 Ty::Num(crate::ty::Num::U128) => (0, u128::MAX, "u128".to_string()),

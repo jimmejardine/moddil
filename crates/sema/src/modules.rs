@@ -211,6 +211,8 @@ impl ItemTree {
                 .last()
                 .cloned()
                 .unwrap_or_else(|| "mod".to_string()),
+            Def::Dimension(d) => self.dimensions[d as usize].name.clone(),
+            Def::Unit(u) => self.units[u as usize].name.clone(),
         }
     }
 

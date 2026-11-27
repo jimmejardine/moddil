@@ -40,7 +40,7 @@ Each page lists its diagnostics by code; the codes are in [Diagnostics](diagnost
 - Items: [Functions](items/functions.md), [Tests](items/tests.md), [Structs](items/structs.md),
   [Enums](items/enums.md), [Traits](items/traits.md), [Impls](items/impls.md)
 - [Attributes](attributes.md)
-- [Types](types.md), [Numbers](numbers.md), [Generics](generics.md), [Text](text.md),
+- [Types](types.md), [Numbers](numbers.md), [Units of measure](units.md), [Generics](generics.md), [Text](text.md),
   [Compile-time evaluation](comptime.md), [Refinements](refinements.md)
 - [The prelude](prelude.md) ([source](prelude/))
 - [Statements](statements.md)

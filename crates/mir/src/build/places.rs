@@ -117,7 +117,7 @@ impl Builder<'_> {
     /// The place `e` denotes without evaluating anything, if it is a local, or fields and
     /// dereferences of one.
     pub(super) fn place_of(&mut self, e: ExprId) -> Option<Place> {
-        if self.coercion(e).is_some() {
+        if self.coercion(e).is_some() || self.unit_conv(e).is_some() {
             return None;
         }
         match self.hir.exprs[e].kind {
@@ -497,6 +497,12 @@ impl Builder<'_> {
     /// `e` as an operand. If an expression evaluated later (`later`) may assign to a local, a
     /// place's value is taken into a temporary first, so the operand keeps the value it had here.
     pub(super) fn operand(&mut self, e: ExprId, later: &[ExprId]) -> Operand {
+        if self.unit_conv(e).is_some() {
+            let ty = self.ty(e);
+            let t = self.temp(ty.clone());
+            self.eval_into(t, e);
+            return self.use_place(Place::local(t), &ty);
+        }
         if self.uncoerced != Some(e)
             && let Some(w) = self.types.wrapped(e).cloned()
         {

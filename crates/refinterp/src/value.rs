@@ -40,6 +40,8 @@ pub(crate) enum Value {
     Anon(String, Vec<(String, std::sync::Arc<Closure>)>),
     /// A variable of another call, seen from a closure's body: the variable itself.
     Alias(Pointer),
+    /// A quantity (`unit.type.1`): a number, and its unit.
+    Quantity(Box<Value>, std::sync::Arc<crate::units::DynUnit>),
 }
 
 /// A closure value (`expr.closure.1`): its expression, the variables in scope where it was
@@ -101,6 +103,8 @@ pub(crate) enum Head {
     Ref,
     Adt(String),
     Closure,
+    /// The argument of a unit parameter (`unit.param.1`): a unit.
+    Units(crate::units::DynUnit),
 }
 
 impl Value {
@@ -122,6 +126,8 @@ impl Value {
             Value::Buf(..) => Head::Buf,
             Value::Ref(..) => Head::Ref,
             Value::Adt { ty, .. } => Head::Adt(ty.clone()),
+            // A quantity's methods are its number's (`unit.method.1`).
+            Value::Quantity(v, _) => v.head(),
         }
     }
 }

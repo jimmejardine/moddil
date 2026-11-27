@@ -25,6 +25,7 @@ mod fields;
 pub(crate) use fields::FIELDS;
 mod ops;
 mod patterns;
+mod quantities;
 pub(crate) mod tasks;
 mod text;
 mod wrappers;
@@ -63,6 +64,8 @@ struct Machine<'p> {
     /// While a `#[selectable]` function runs for a `select` (`task.select.4`): its receive, by
     /// range, and what was received in its place.
     received: Option<(TextRange, Value)>,
+    /// A sum a type gives a unit (`unit.op.add.1`): where it is, and the unit.
+    sum_unit: Option<(TextRange, crate::units::DynUnit)>,
     /// Where each text is, so a position's text is told from other text (`text.pos.1`).
     texts: crate::texts::Texts<Pointer>,
     /// For a conversion being run (`num.convert.1`): the type it converts to.
@@ -119,6 +122,7 @@ impl<'p> Machine<'p> {
             nodes: HashMap::new(),
             reflected: Vec::new(),
             received: None,
+            sum_unit: None,
             texts: crate::texts::Texts::default(),
             convert_to: None,
         }
@@ -907,4 +911,9 @@ fn literal(node: &SyntaxNode, negate: bool) -> Value {
 /// Where expression `e` is.
 fn range_of(e: &ast::Expr) -> TextRange {
     e.syntax().text_range()
+}
+
+/// Integer arithmetic on `int`s, trapping as the reference says: what unit conversions use.
+pub(crate) fn int_arith(op: K, a: Value, b: Value, range: TextRange) -> Eval {
+    ops::arith(op, a, b, range)
 }

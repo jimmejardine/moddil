@@ -7,7 +7,7 @@
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
-use crate::collect::{item_tree, node_at, source};
+use crate::collect::{node_at, source};
 use crate::hir::{
     Body, Expr, ExprId, ExprKind, FmtPiece, Local, LocalId, Pat, PatId, PatKind, Stmt,
 };
@@ -40,7 +40,7 @@ pub struct Lowered {
 #[salsa::tracked(returns(ref))]
 pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
     let program = owner.program(db);
-    let items = item_tree(db, program);
+    let items = crate::typed_item_tree(db, program);
     let (src, module) = match owner.item(db) {
         Item::Fn(i) => (items.fns[i as usize].src, items.fns[i as usize].module),
         Item::Closure(..) => unreachable!("a closure's body is its function's or test's"),

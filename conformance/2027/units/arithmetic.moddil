@@ -1,0 +1,74 @@
+// covers: unit.dim.1, unit.dim.2, unit.decl.1, unit.decl.2, unit.type.1, unit.type.2, unit.lit.1, unit.conv.1, unit.conv.2, unit.op.add.1, unit.op.mul.1, unit.op.mul.2, unit.op.3, unit.erase.1
+
+dimension Length;
+dimension Time;
+dimension Velocity = Length / Time;
+
+unit m: Length;
+unit cm = m / 100;
+unit mm = m / 1000;
+unit km = 1000 * m;
+unit s: Time;
+unit h = 3600 * s;
+
+fn speed(d: f64[km], t: f64[h]) -> f64[km/h] {
+    d / t
+}
+
+test "a unit literal has its unit, and shows its number" {
+    let d = 2.5[m];
+    d  // => 2.5
+}
+
+test "a sum is in the unit a type gives it" {
+    let length: f64[m] = 100.0[cm] + 50.5[mm];
+    length  // => 1.0505
+}
+
+test "without a type, a sum is in the finer unit" {
+    let a = 1[m] + 5[cm];
+    let b: int[cm] = a;
+    b  // => 105
+}
+
+test "a value converts to the unit it is wanted in" {
+    let x: f64[cm] = 2.5[m];
+    x  // => 250.0
+}
+
+test "units multiply and divide" {
+    speed(120.0[km], 2.0[h])  // => 60.0
+}
+
+test "a quotient of one dimension is a plain number" {
+    let r: f64 = 1.0[m] / 5.0[cm];
+    r  // => 20.0
+}
+
+test "a product with no dimension left is a plain number" {
+    let r: f64 = 3.0[m] * 2.0[km^-1];
+    r  // => 0.006
+}
+
+test "a plain number scales a quantity" {
+    let x = 2.0 * 3.0[m];
+    let y: f64[cm] = x;
+    y  // => 600.0
+}
+
+test "comparisons convert to one unit" {
+    1.0[m] > 99.0[cm]  // => true
+    ;
+    100[cm] == 1[m]  // => true
+}
+
+test "negation keeps the unit" {
+    let x: f64[cm] = -(1.5[m]);
+    x  // => -150.0
+}
+
+test "a compound assignment keeps the left's unit" {
+    let mut x = 1.0[m];
+    x += 50.0[cm];
+    x  // => 1.5
+}

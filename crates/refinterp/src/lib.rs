@@ -23,6 +23,7 @@ mod memory;
 mod num;
 mod program;
 mod texts;
+mod units;
 mod value;
 
 use program::Program;

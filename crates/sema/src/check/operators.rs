@@ -49,7 +49,7 @@ impl Checker<'_> {
 
     /// Whether `r` is a literal, or built of them, whose type an operator's other operand gives
     /// (`num.lit.1`): checked against that type as it is.
-    fn literal_operand(&self, r: ExprId) -> bool {
+    pub(super) fn literal_operand(&self, r: ExprId) -> bool {
         matches!(
             self.body.exprs[r].kind,
             ExprKind::Int(_)
@@ -156,6 +156,31 @@ impl Checker<'_> {
         let t = self.infer(x);
         let t = self.read_through(x, &t, true);
         let t = self.items.base(&t);
+        // A quantity's negation is one of its unit (`unit.op.3`).
+        if let Ty::Quantity(b, u) = self.norm(&t) {
+            if op != UnaryOp::Neg || self.items.is_affine(&self.solver.resolve_units(&u)) {
+                let code = if op == UnaryOp::Neg {
+                    Code::E0228
+                } else {
+                    Code::E0227
+                };
+                self.report(
+                    code,
+                    range,
+                    "this is not defined on a quantity of this unit",
+                );
+                return Ty::Error;
+            }
+            let b = (*b).clone();
+            return match self.norm(&b) {
+                Ty::Int | Ty::Num(_) => Ty::quantity(b, u),
+                Ty::Infer(_) if self.solver.table.lit_kind(&b).is_some() => Ty::quantity(b, u),
+                bt => match self.operator(e, range, "-", &bt, ("Neg", "neg")) {
+                    Some(Ty::Error) | None => Ty::Error,
+                    Some(t) => Ty::quantity(t, u),
+                },
+            };
+        }
         let sym = if op == UnaryOp::Neg { "-" } else { "!" };
         match (op, &t) {
             (_, Ty::Error | Ty::Never) => Ty::Error,
@@ -200,11 +225,31 @@ impl Checker<'_> {
         range: TextRange,
         op: BinaryOp,
         lt: &Ty,
+        l: Option<ExprId>,
         r: ExprId,
     ) -> Ty {
         // A refined operand is its base (`refine.base.1`).
         let lt = self.norm(lt);
         let lt = self.items.base(&lt);
+        // A quantity (`unit.op.*`).
+        if let Ty::Quantity(..) = lt {
+            return self.quantity_binary(e, range, op, &lt, l, r, None);
+        }
+        // A plain number and a quantity (`2.0 * x`).
+        let float_bits =
+            matches!(lt, Ty::Num(n) if n.is_float()) && (op.is_bitwise() || op.wraps());
+        if !float_bits
+            && (matches!(lt, Ty::Int | Ty::Num(_)) || self.solver.table.lit_kind(&lt).is_some())
+            && let Some(rt) = self.quantity_right(op, r)
+        {
+            if let Ty::Quantity(..) = rt {
+                return self.quantity_binary(e, range, op, &lt, l, r, Some(rt));
+            }
+            if !self.coerce(&rt, &lt) {
+                self.mismatch(r, &lt, &rt);
+            }
+            return lt;
+        }
         let names = match op {
             BinaryOp::Add => Some(("Add", "add")),
             BinaryOp::Sub => Some(("Sub", "sub")),
@@ -303,13 +348,19 @@ impl Checker<'_> {
 
     pub(super) fn compare(&mut self, e: ExprId, first: ExprId, rest: &[(CompareOp, ExprId)]) -> Ty {
         let range = self.range(e);
-        let t0 = self.infer(first);
-        let t0 = self.read_through(first, &t0, false);
-        let mut prev = (first, self.items.base(&t0));
-        for (i, &(op, x)) in rest.iter().enumerate() {
+        let xs: Vec<ExprId> = std::iter::once(first)
+            .chain(rest.iter().map(|&(_, x)| x))
+            .collect();
+        let mut ts: Vec<Ty> = Vec::new();
+        for &x in &xs {
             let t = self.infer(x);
-            let t = self.read_through(x, &t, false);
-            let t = self.items.base(&t);
+            ts.push(self.read_through(x, &t, false));
+        }
+        // Quantities compare in one unit (`unit.op.add.1`), as their bases.
+        self.compare_units(&xs, &mut ts, range);
+        let mut prev = (first, self.items.base(&ts[0]));
+        for (i, &(op, x)) in rest.iter().enumerate() {
+            let t = self.items.base(&ts[i + 1]);
             let (_, pt) = prev.clone();
             let Some(j) = self.join(&pt, &t) else {
                 if op.is_ordering() {

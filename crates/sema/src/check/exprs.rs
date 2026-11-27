@@ -9,6 +9,14 @@ use super::finish::Deferred;
 use super::{Checker, LoopCx, index};
 
 impl Checker<'_> {
+    /// Literal `e`'s type `t`, as a quantity if it is written with a unit (`unit.lit.1`).
+    fn with_literal_unit(&mut self, e: ExprId, t: Ty) -> Ty {
+        match self.body.units.get(&e) {
+            Some(u) => Ty::quantity(t, u.clone()),
+            None => t,
+        }
+    }
+
     /// `fmt"…"` (`expr.fmt.1`): each hole's type (or what a borrow in it points to) is
     /// `Display`, or `Debug` for `{e:?}`; and its spec fits it (`expr.fmt.spec.2`,
     /// `expr.fmt.spec.3`).
@@ -19,6 +27,10 @@ impl Checker<'_> {
             };
             let tr = if spec.debug { "Debug" } else { "Display" };
             let t = self.infer(*h);
+            // A quantity written in a unit is converted to it (`unit.fmt.1`).
+            if let Some((u, _)) = &spec.unit {
+                self.fmt_in_unit(*h, &t, u);
+            }
             let t = match self.norm(&t) {
                 Ty::Ref(_, x) => (*x).clone(),
                 t => t,
@@ -46,7 +58,7 @@ impl Checker<'_> {
                     );
                 }
             }
-            let base = self.items.base(&t);
+            let base = self.items.base(&t.split_unit().0);
             let number = matches!(base, Ty::Int | Ty::Num(_));
             let float = matches!(base, Ty::Num(n) if n.is_float());
             let text = base == Ty::Str || base == self.items.string_ty();
@@ -85,11 +97,16 @@ impl Checker<'_> {
         match &self.body.exprs[e].kind {
             ExprKind::Missing => Ty::Error,
             // An exact number until its type is known (`num.lit.1`): checked against it then.
+            // With a unit, a quantity of it (`unit.lit.1`).
             &ExprKind::Int(v) => {
                 self.literals.push((e, v));
-                self.solver.table.fresh_lit(crate::Lit::Int)
+                let t = self.solver.table.fresh_lit(crate::Lit::Int);
+                self.with_literal_unit(e, t)
             }
-            ExprKind::Float(_) => self.solver.table.fresh_lit(crate::Lit::Float),
+            ExprKind::Float(_) => {
+                let t = self.solver.table.fresh_lit(crate::Lit::Float);
+                self.with_literal_unit(e, t)
+            }
             ExprKind::Bool(_) => Ty::Bool,
             ExprKind::Unit => Ty::Unit,
             ExprKind::Char(_) => Ty::Char,
@@ -378,7 +395,7 @@ impl Checker<'_> {
             &ExprKind::Binary(op, l, r) => {
                 let lt = self.infer(l);
                 let lt = self.read_through(l, &lt, true);
-                self.binary(e, range, op, &lt, r)
+                self.binary(e, range, op, &lt, Some(l), r)
             }
             &ExprKind::Logic(_, l, r) => {
                 self.check(l, &Ty::Bool);
@@ -413,7 +430,24 @@ impl Checker<'_> {
                         let lt = self.norm(&lt);
                         match lt {
                             Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Error | Ty::Never => {
-                                self.binary(e, range, op, &lt, value);
+                                self.binary(e, range, op, &lt, None, value);
+                            }
+                            // A quantity keeps its unit: what is added is converted to it
+                            // (`unit.op.add.1`).
+                            Ty::Quantity(..) => {
+                                let t = self.binary(e, range, op, &lt, None, value);
+                                if t != Ty::Error && !self.coerce(&t, &lt) {
+                                    let (want, got) = (self.show(&lt), self.show(&t));
+                                    self.report(
+                                        Code::E0224,
+                                        range,
+                                        format!(
+                                            "`{}=` gives a `{got}`, which cannot be stored in a \
+                                             `{want}`",
+                                            op.symbol()
+                                        ),
+                                    );
+                                }
                             }
                             // Through its operator trait (`expr.assign.compound.2`): `x = x + y`.
                             Ty::Adt(..)
@@ -426,7 +460,7 @@ impl Checker<'_> {
                                         | crate::hir::BinaryOp::Rem
                                 ) =>
                             {
-                                let t = self.binary(e, range, op, &lt, value);
+                                let t = self.binary(e, range, op, &lt, None, value);
                                 if t != Ty::Error && !self.coerce(&t, &lt) {
                                     let (want, got) = (self.show(&lt), self.show(&t));
                                     self.report(
@@ -441,7 +475,7 @@ impl Checker<'_> {
                                 }
                             }
                             Ty::Infer(_) if self.solver.table.lit_kind(&lt).is_some() => {
-                                self.binary(e, range, op, &lt, value);
+                                self.binary(e, range, op, &lt, None, value);
                             }
                             // A write through a borrow is written with `*` (`borrow.deref.2`).
                             Ty::Ref(..) => {

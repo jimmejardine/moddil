@@ -109,7 +109,7 @@ unit K:  Temperature;
 unit degC = K + 273.15;       // affine
 unit B:  Information;
 unit MiB = 1048576 * B;
-unit USD: Currency::USD;      // each currency is its own base dimension (see below)
+unit USD: Usd;               // each currency is its own base dimension (see below)
 ```
 
 **Unit expressions** in declarations use explicit operators over unit names: `*` and `/`
@@ -130,17 +130,18 @@ weakness.
 - **Conversion rules:**
   - floating-point representations convert implicitly;
   - integer representations convert implicitly only when exact (`cm` to `mm`); otherwise the
-    conversion is explicit, with a rounding mode: `.to_unit::<cm>(Round::HalfEven)`;
+    conversion is explicit, with a rounding mode: `.to_unit::<cm>(Round::NearestEven)`;
   - fractional integer quantities use fixed point, `Fixed<1>[cm]`; units never carry a scale of their
     own ([`numerics.md`: Decimals for money](numerics.md#decimals-for-money));
   - different dimensions never convert.
 - **Rational exponents:** exponents are fractions, as in F#, so `sqrt(f64[m^2])` is `f64[m]`
   and `sqrt(f64[Hz])` is `f64[Hz^(1/2)]` (noise densities such as `V/Hz^(1/2)` can be written).
   Exponents are normalised, so `m^(1/2) * m^(1/2)` is `m`.
-- **Angles are their own dimension.** `Angle` is a base dimension with `rad`, `deg` and
-  `turn`, in `moddil/units/angle`. `sin` and `cos` accept any angle unit and convert, so passing
-  degrees where radians are meant is a type error. Where the dimensions cancel (`rad/s * s`) the
-  result is plain; where a formula needs a bare number, `.per_radian()` says so explicitly.
+- **Angles are their own dimension.** `Angle` is a base dimension, and its unit `rad`, declared
+  in the prelude because `sin` and `cos` take them; `deg` and `turn` are in `moddil/units/angle`.
+  `sin` and `cos` accept any angle unit and convert, so passing degrees where radians are meant is
+  a type error. An angle is a dimension like any other, so `rad/s * s` is `f64[rad]` and `rad/rad`
+  is plain; where a formula needs a bare number, `.per_radian()` says so explicitly.
 - **Currencies:** each currency is its own base dimension, so `USD` and `EUR` never mix. Conversion
   needs an explicit exchange rate of type `Fixed<6>[EUR/USD]`.
 - **Points and differences (affine):** absolute temperatures and timestamps are distinct from
@@ -151,8 +152,9 @@ weakness.
   fn sqr<U>(x: f64[U]) -> f64[U^2] { x * x }
   fn mean<U>(xs: &[f64[U]]) -> f64[U] { … }
   ```
-- **Formatting and parsing:** `fmt"{length:[mm]}"` prints in the requested unit; parsing
-  `"12.5 km"` returns a `Result`.
+- **Formatting and parsing:** `fmt"{length:[mm]}"` prints in the requested unit, followed by
+  its name; `"12.5 km".parse_quantity::<f64[m]>()` returns a `Result`, reading any declared unit
+  of the dimension. Plain `{length}` prints the number.
 
 ## Core and mods
 
@@ -162,7 +164,7 @@ Per R2 (small core):
 |---|---|
 | Unit expressions in types and literals (`[m/s^2]`) | `dimension` and `unit` declarations |
 | Unit algebra and inference in the type checker (free abelian group arithmetic, scale and offset constants) | `moddil/units/si`, `/information`, `/currency`, `/angle`, community packs |
-| Erasure: units have no runtime representation | Formatting, parsing, conversions with explicit rounding |
+| Erasure: units have no runtime representation; the tables formatting and parsing use are constants it computes | Formatting and parsing helpers, conversions with explicit rounding |
 
 Unit algebra has to be in the core because unit variables are inferred by the type checker. It is a
 small piece: normalising products of base dimensions with rational exponents.
@@ -175,9 +177,9 @@ Unit names are imported like types:
 use moddil::units::si::{m, cm, mm, s, ms};
 ```
 
-A whole unit pack can be imported through its declared prelude
-(`use moddil::units::si::prelude::*`). Other glob imports are not allowed
-([`modules.md`: Imports](modules.md#imports)).
+A whole unit pack is meant to be importable through its declared prelude
+(`use moddil::units::si::prelude::*`), the one glob import allowed
+([`modules.md`: Imports](modules.md#imports)); not built yet.
 
 ## Across tiers
 

@@ -10,6 +10,22 @@ use std::sync::Arc;
 use crate::Ty;
 use crate::items::{COPY_CAP, Container, ItemTree, Pred, SelfKind};
 use crate::ty::{AssocTy, TraitRef};
+use crate::units::{Ratio, UnitAtom, UnitTy};
+
+/// The prelude's traits a quantity has whenever its base does (`unit.trait.1`): those that keep
+/// a value's unit.
+const UNIT_TRANSPARENT: &[&str] = &[
+    "Copy",
+    "Clone",
+    "PartialEq",
+    "Eq",
+    "PartialOrd",
+    "Ord",
+    "Hash",
+    "Debug",
+    "Display",
+    "Default",
+];
 
 /// Inference variables and what they are bound to.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -101,6 +117,11 @@ impl Table {
             Ty::Infer(v) => Ty::Infer(v),
             t => t.map(&mut |x| self.resolve(x)),
         }
+    }
+
+    /// Binds variable `v` to `t` as it is: a unit, which no literal's kind constrains.
+    pub(crate) fn set(&mut self, v: u32, t: Ty) {
+        self.vars[v as usize] = Some(t);
     }
 
     fn occurs(&self, v: u32, t: &Ty) -> bool {
@@ -401,7 +422,32 @@ impl<'a> Solver<'a> {
         match (&a, &b) {
             (Ty::Error, _) | (_, Ty::Error) => true,
             (Ty::Infer(x), Ty::Infer(y)) if x == y => true,
+            // A number literal where a quantity whose unit is only being inferred is wanted
+            // (`sqr(3.0)` for `sqr<U>(x: f64[U])`): its unit is one (`unit.param.2`).
+            (Ty::Infer(x), Ty::Quantity(b, u)) | (Ty::Quantity(b, u), Ty::Infer(x))
+                if self.table.lit_kind(&Ty::Infer(*x)).is_some()
+                    && self.unit_has_infer(u)
+                    && !u.has_named() =>
+            {
+                let (b, u) = (b.clone(), u.clone());
+                self.unify(&Ty::Infer(*x), &b) && self.unify_units(&u, &UnitTy::one())
+            }
             (Ty::Infer(x), t) | (t, Ty::Infer(x)) => self.table.bind(*x, t.clone()),
+            // Quantities: the same base, and the same unit (`unit.type.3`).
+            (Ty::Quantity(x, u), Ty::Quantity(y, v)) => {
+                let (x, y, u, v) = (x.clone(), y.clone(), u.clone(), v.clone());
+                self.unify(&x, &y) && self.unify_units(&u, &v)
+            }
+            (Ty::Units(u), Ty::Units(v)) => {
+                let (u, v) = (u.clone(), v.clone());
+                self.unify_units(&u, &v)
+            }
+            // A plain number where a quantity whose unit is still open is wanted: its unit is
+            // one.
+            (Ty::Quantity(x, u), t) | (t, Ty::Quantity(x, u)) if self.unit_has_infer(u) => {
+                let (x, u, t) = (x.clone(), u.clone(), t.clone());
+                self.unify(&x, &t) && self.unify_units(&u, &UnitTy::one())
+            }
             (Ty::Tuple(xs), Ty::Tuple(ys)) => {
                 xs.len() == ys.len() && xs.iter().zip(ys.iter()).all(|(x, y)| self.unify(x, y))
             }
@@ -466,6 +512,40 @@ impl<'a> Solver<'a> {
         }
     }
 
+    /// Unit `u` with each bound variable in it replaced.
+    pub fn resolve_units(&self, u: &UnitTy) -> UnitTy {
+        match self.table.resolve(&Ty::Units(u.clone())) {
+            Ty::Units(w) => w,
+            _ => u.clone(),
+        }
+    }
+
+    fn unit_has_infer(&self, u: &UnitTy) -> bool {
+        self.resolve_units(u).has_infer()
+    }
+
+    /// Makes units `a` and `b` the same (`unit.param.2`): their quotient one. Units form a vector
+    /// space over the rationals, so solving it for one variable (the lowest, for a stable
+    /// answer) is the most general way to.
+    pub fn unify_units(&mut self, a: &UnitTy, b: &UnitTy) -> bool {
+        let d = self.resolve_units(a).div(&self.resolve_units(b));
+        if d.is_one() {
+            return true;
+        }
+        let Some((v, k)) = d.parts().iter().find_map(|(atom, k)| match atom {
+            UnitAtom::Infer(v) => Some((*v, *k)),
+            _ => None,
+        }) else {
+            return false;
+        };
+        let (rest, _) = d.without(&UnitAtom::Infer(v));
+        let Some(inv) = Ratio::ONE.div(k).and_then(|r| r.mul(Ratio::int(-1))) else {
+            return false;
+        };
+        self.table.set(v, Ty::Units(rest.pow(inv)));
+        true
+    }
+
     /// Whether `a` and `b` can be unified, without binding anything.
     pub fn can_unify(&mut self, a: &Ty, b: &Ty) -> bool {
         let saved = self.table.clone();
@@ -520,6 +600,31 @@ impl<'a> Solver<'a> {
                 } else {
                     Answer::No
                 };
+            }
+            // A quantity has the traits of its base that do not change a value's unit
+            // (`unit.trait.1`): copied, compared, hashed and shown as its base is.
+            Ty::Quantity(b, u) => {
+                let t = &self.tree.traits[tr as usize];
+                let transparent = t.src == crate::items::Src::Prelude
+                    && UNIT_TRANSPARENT.contains(&t.name.as_str());
+                if !transparent {
+                    return Answer::No;
+                }
+                let mut args = Vec::new();
+                for a in trait_ref.args.iter() {
+                    match self.norm(a) {
+                        Ty::Quantity(x, v) if v == *u => args.push((*x).clone()),
+                        Ty::Quantity(..) => return Answer::No,
+                        a => args.push(a),
+                    }
+                }
+                let stripped = TraitRef {
+                    trait_: tr,
+                    name: trait_ref.name.clone(),
+                    args: args.into(),
+                };
+                let b = (**b).clone();
+                return self.implements(&b, &stripped);
             }
             // A refined type has its base's traits (`refine.base.1`), and the impls of its own
             // of traits its base does not implement (`refine.trait.2`).
@@ -814,8 +919,11 @@ impl<'a> Solver<'a> {
             | Ty::FnPtr(..)
             | Ty::Char
             | Ty::Str
+            | Ty::Units(_)
             | Ty::Len(_) => false,
-            Ty::Array(t, _) | Ty::Slice(t) => self.needs_drop_inner(t, depth + 1),
+            Ty::Array(t, _) | Ty::Slice(t) | Ty::Quantity(t, _) => {
+                self.needs_drop_inner(t, depth + 1)
+            }
             Ty::Refined(..) => {
                 let base = self.tree.base(ty);
                 self.needs_drop_inner(&base, depth + 1)

@@ -1,0 +1,27 @@
+// covers: unit.decl.3, unit.affine.1, unit.affine.2
+
+dimension Temperature;
+
+unit K: Temperature;
+unit degC = K + 273.15;
+
+test "converting a point applies the offset" {
+    let t: f64[K] = 20.0[degC];
+    t  // => 293.15
+}
+
+test "two points apart are a difference in the base unit" {
+    let d = 30.0[degC] - 20.0[degC];
+    let k: f64[K] = d;
+    k  // => 10.0
+}
+
+test "a point and a difference are a point" {
+    let warm = 20.0[degC] + 5.0[K];
+    let c: f64[degC] = warm;
+    c  // => 25.0
+}
+
+test "points compare as points" {
+    20.0[degC] < 294.0[K]  // => true
+}

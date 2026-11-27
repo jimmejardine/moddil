@@ -26,6 +26,7 @@ macro_rules! prelude_files {
             "prelude/concurrency.moddil" => "../../../reference/2027/prelude/concurrency.moddil",
             "prelude/derives.moddil" => "../../../reference/2027/prelude/derives.moddil",
             "prelude/alloc.moddil" => "../../../reference/2027/prelude/alloc.moddil",
+            "prelude/units.moddil" => "../../../reference/2027/prelude/units.moddil",
         )
     };
 }
@@ -81,7 +82,7 @@ pub const PRELUDE: &str = prelude_files!(joined);
 
 /// The prelude's files, in [`PRELUDE`]'s order: each one's path under `reference/2027/`
 /// (`prelude/core.moddil`), and its text.
-pub const PRELUDE_FILES: [(&str, &str); 16] = prelude_files!(paths_and_texts);
+pub const PRELUDE_FILES: [(&str, &str); 17] = prelude_files!(paths_and_texts);
 
 /// The `core` mod's modules, in order: each one's name and source.
 pub const CORE_MODULES: [(&str, &str); 8] = core_modules!(names_and_texts);

@@ -1,0 +1,213 @@
+// Part of the prelude (`../prelude.md`): units of measure (`../units.md`). Units are the type
+// checker's: a program's dimensions and units are its own `dimension` and `unit` items, and the
+// prelude declares only the angle, which `sin`, `cos` and `tan` take in any of its units
+// (`unit.angle.1`).
+
+// An angle (`unit.angle.1`), whose base unit is the radian.
+dimension Angle;
+
+unit rad: Angle;
+
+// `x · n / d`, rounded by `mode`: an integer quantity converted to a unit it is not a whole
+// number of, by `to_unit::<u>(mode)` (`unit.to.1`). `d` is positive.
+fn __rescale(x: int, n: int, d: int, mode: Round) -> int {
+    let p = x * n;
+    let q = p / d;
+    let r = p % d;
+    if r == 0 {
+        return q;
+    }
+    let away = if r < 0 { q - 1 } else { q + 1 };
+    let twice = if r < 0 { -2 * r } else { 2 * r };
+    match mode {
+        Round::TowardZero  => q,
+        Round::Down        => if r < 0 { q - 1 } else { q },
+        Round::Up          => if r > 0 { q + 1 } else { q },
+        Round::NearestAway => if twice >= d { away } else { q },
+        Round::NearestEven => { if twice > d || (twice == d && q % 2 != 0) { away } else { q } }
+    }
+}
+
+// Text that is not a quantity of the dimension wanted (`unit.parse.1`).
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct UnitParseError;
+
+impl Display for UnitParseError {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str("not a quantity of this dimension");
+    }
+}
+
+// Whether byte `b` is a decimal digit.
+fn __digit(b: u8) -> bool {
+    b >= 48 && b <= 57
+}
+
+// Where the number of a quantity's text ends: its sign, digits, point and exponent.
+fn __number_end(s: &str) -> int {
+    let n = s.len();
+    let mut i = 0;
+    if n > 0 && (s.byte_at(0) == 45 || s.byte_at(0) == 43) {
+        i = 1;
+    }
+    while i < n && (__digit(s.byte_at(i)) || s.byte_at(i) == 46) {
+        i += 1;
+    }
+    // An exponent: `e` or `E`, a sign, and digits.
+    if i < n && (s.byte_at(i) == 101 || s.byte_at(i) == 69) {
+        let mut j = i + 1;
+        if j < n && (s.byte_at(j) == 45 || s.byte_at(j) == 43) {
+            j += 1;
+        }
+        if j < n && __digit(s.byte_at(j)) {
+            while j < n && __digit(s.byte_at(j)) {
+                j += 1;
+            }
+            i = j;
+        }
+    }
+    i
+}
+
+// A decimal number's value, `12.5`, `-3`, `1e-3`, as the nearest `f64`: its digits, at most 15
+// of them, divided or multiplied by a power of ten, each exact.
+fn __decimal_f64(s: &str) -> Option<f64> {
+    let n = s.len();
+    let mut i = 0;
+    let negative = n > 0 && s.byte_at(0) == 45;
+    if n > 0 && (s.byte_at(0) == 45 || s.byte_at(0) == 43) {
+        i = 1;
+    }
+    let mut m: int = 0;
+    let mut digits = 0;
+    let mut shift = 0;
+    let mut point = false;
+    while i < n && (__digit(s.byte_at(i)) || s.byte_at(i) == 46) {
+        let b = s.byte_at(i);
+        if b == 46 {
+            if point {
+                return None;
+            }
+            point = true;
+        } else if digits < 15 {
+            let d = (b - 48).checked_to::<int>()?;
+            m = m * 10 + d;
+            digits += 1;
+            if point {
+                shift -= 1;
+            }
+        } else if !point {
+            shift += 1;
+        }
+        i += 1;
+    }
+    if digits == 0 {
+        return None;
+    }
+    if i < n {
+        let b = s.byte_at(i);
+        if b != 101 && b != 69 {
+            return None;
+        }
+        i += 1;
+        let neg_e = i < n && s.byte_at(i) == 45;
+        if i < n && (s.byte_at(i) == 45 || s.byte_at(i) == 43) {
+            i += 1;
+        }
+        if i == n {
+            return None;
+        }
+        let mut e = 0;
+        while i < n {
+            let b = s.byte_at(i);
+            if !__digit(b) {
+                return None;
+            }
+            let d = (b - 48).checked_to::<int>()?;
+            e = e * 10 + d;
+            i += 1;
+        }
+        shift = if neg_e { shift - e } else { shift + e };
+    }
+    let mut v = m.checked_to::<f64>()?;
+    let mut p = 1.0;
+    let mut k = if shift < 0 { -shift } else { shift };
+    while k > 0 {
+        p = p * 10.0;
+        k -= 1;
+    }
+    v = if shift < 0 { v / p } else { v * p };
+    Some(if negative { -v } else { v })
+}
+
+// A quantity's text, `12.5 km` or `12.5km`: its number's text and its unit's name.
+fn __split_quantity(s: &str) -> Option<(&str, &str)> {
+    let t = s.trim();
+    let end = __number_end(t);
+    if end == 0 || end == t.len() {
+        return None;
+    }
+    // The number is ASCII, so it ends at a character's boundary.
+    let number = t.slice_bytes(0..end) ?! "a number's end is a boundary";
+    let name = t.slice_bytes(end..t.len()) ?! "a number's end is a boundary";
+    Some((number, name.trim()))
+}
+
+// The line of `table` for unit `name` (`name,kind,factor,offset`): its kind, factor and offset.
+fn __unit_line(table: &str, name: &str) -> Option<(&str, &str, &str)> from table {
+    let mut rest = table;
+    while let Some((line, more)) = rest.split_once('\n') {
+        rest = more;
+        let Some((n, r)) = line.split_once(',') else { continue };
+        if n != name {
+            continue;
+        }
+        let Some((kind, r)) = r.split_once(',') else { continue };
+        let Some((factor, offset)) = r.split_once(',') else { continue };
+        return Some((kind, factor, offset));
+    }
+    None
+}
+
+// `s`, a quantity's text (`12.5 km`), as a number of the unit `table` converts to: the table has
+// a line `name,kind,factor,offset` for each unit of the dimension, its value multiplied (`m`) or
+// divided (`d`) by a whole factor, or multiplied by a float's (`f`), then the offset added
+// (`unit.parse.1`).
+fn __parse_quantity_f64(s: &str, table: &str) -> Result<f64, UnitParseError> {
+    let Some((number, name)) = __split_quantity(s) else { return Err(UnitParseError) };
+    let Some(v) = __decimal_f64(number) else { return Err(UnitParseError) };
+    let Some((kind, factor, offset)) = __unit_line(table, name) else {
+        return Err(UnitParseError);
+    };
+    let Some(f) = __decimal_f64(factor) else { return Err(UnitParseError) };
+    let v = if kind == "d" { v / f } else { v * f };
+    if offset == "" {
+        return Ok(v);
+    }
+    match __decimal_f64(offset) {
+        Some(o) => Ok(v + o),
+        None    => Err(UnitParseError),
+    }
+}
+
+// As `__parse_quantity_f64`, to an `int`: a whole number, in a unit whose factor is whole.
+fn __parse_quantity_int(s: &str, table: &str) -> Result<int, UnitParseError> {
+    let Some((number, name)) = __split_quantity(s) else { return Err(UnitParseError) };
+    let Some(v) = int::from_str(number) else { return Err(UnitParseError) };
+    let Some((kind, factor, offset)) = __unit_line(table, name) else {
+        return Err(UnitParseError);
+    };
+    let Some(f) = int::from_str(factor) else { return Err(UnitParseError) };
+    if kind != "m" {
+        return Err(UnitParseError);
+    }
+    let Some(v) = v.checked_mul(f) else { return Err(UnitParseError) };
+    if offset == "" {
+        return Ok(v);
+    }
+    let Some(o) = int::from_str(offset) else { return Err(UnitParseError) };
+    match v.checked_add(o) {
+        Some(x) => Ok(x),
+        None    => Err(UnitParseError),
+    }
+}

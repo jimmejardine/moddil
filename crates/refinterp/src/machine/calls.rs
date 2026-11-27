@@ -147,6 +147,8 @@ impl Machine<'_> {
                 }
             }
             (ast::Type::Path(_), v) => {
+                // A unit parameter, from the argument's unit (`unit.param.2`).
+                self.infer_units(t, v, names, out);
                 let name = first_name(t.syntax());
                 if names.contains(&name) {
                     out.entry(name).or_insert_with(|| v.head());
@@ -1297,6 +1299,15 @@ impl Machine<'_> {
             }
         };
         let value = self.memory.load(&place);
+        // A quantity's methods (`unit.method.1`), and text read as one (`unit.parse.1`).
+        if name == "parse_quantity"
+            && let Some(v) = self.parse_quantity(node, &value, range)?
+        {
+            return Ok(v);
+        }
+        if let Some(v) = self.quantity_method(node, &name, &value, &args, range)? {
+            return Ok(v);
+        }
         // A tagged literal's `read` (`comptime.tag.fields.1`).
         if name == "read" {
             let mut w = place.clone();

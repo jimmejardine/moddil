@@ -12,6 +12,7 @@ use crate::items::{Def, GenericParam, ItemTree, Pred};
 use crate::modules::PathError;
 use crate::traits::elaborate;
 use crate::ty::{AssocTy, TraitRef};
+use crate::units::{UnitAtom, UnitTy};
 use crate::{Code, Diagnostic, Ty};
 
 /// One segment of a path: its name, where it is, and its generic arguments (`Vec::<int>`).
@@ -111,6 +112,78 @@ impl<'a> Scope<'a> {
     }
 }
 
+/// `base` with the unit `suffix` writes (`unit.type.1`): a number type, or a struct or enum, a
+/// type parameter or a type to infer, may have one (E0229).
+fn quantity_type(
+    base: Ty,
+    suffix: &SyntaxNode,
+    range: TextRange,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> Ty {
+    let Some(unit) = resolve_unit(suffix, scope, diags) else {
+        return Ty::Error;
+    };
+    match &base {
+        Ty::Error => Ty::Error,
+        Ty::Int | Ty::Num(_) | Ty::Adt(..) | Ty::Param(..) | Ty::Infer(_) | Ty::Quantity(..) => {
+            Ty::quantity(base, unit)
+        }
+        t => {
+            diags.push(Diagnostic::error(
+                Code::E0229,
+                range,
+                format!("`{t}` is not a number, so it has no unit"),
+            ));
+            Ty::Error
+        }
+    }
+}
+
+/// The unit a unit expression writes (`m/s^2`, `U^2`; the `[…]` of a type or literal): its
+/// units and unit parameters to their powers (`unit.type.2`).
+pub(crate) fn resolve_unit(
+    node: &SyntaxNode,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<UnitTy> {
+    crate::collect::units::eval::<UnitTy>(node, &mut |a| {
+        let names = crate::collect::units::atom_path(a)?;
+        if let [one] = names.as_slice()
+            && let Some(i) = scope.params.iter().rposition(|p| p.name == *one)
+        {
+            if scope.params[i].unit {
+                return Some(UnitTy::atom(UnitAtom::Param(i as u32, one.as_str().into())));
+            }
+            diags.push(Diagnostic::error(
+                Code::E0223,
+                a.text_range(),
+                format!("`{one}` is a type parameter, not a unit"),
+            ));
+            return None;
+        }
+        let strs: Vec<&str> = names.iter().map(String::as_str).collect();
+        let what = match scope.tree.path(scope.module, &strs, scope.prelude_first) {
+            Ok((Def::Unit(u), n)) if n == strs.len() => {
+                let name = names.join("::");
+                return Some(UnitTy::atom(UnitAtom::Named(u, name.as_str().into())));
+            }
+            Ok((Def::Dimension(_), n)) if n == strs.len() => format!(
+                "`{}` is a dimension; a unit of it is written here",
+                names.join("::")
+            ),
+            Err(PathError::Private(k, def)) => {
+                let _ = k;
+                diags.push(scope.tree.hidden(def, a.text_range()));
+                return None;
+            }
+            _ => format!("there is no unit called `{}`", names.join("::")),
+        };
+        diags.push(Diagnostic::error(Code::E0223, a.text_range(), what));
+        None
+    })
+}
+
 pub(crate) fn hole() -> Ty {
     Ty::Infer(Ty::HOLE)
 }
@@ -148,7 +221,35 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
                 ));
                 return Ty::Error;
             }
-            t
+            // A unit, or a unit parameter, is a unit parameter's argument, not a type
+            // (`unit.param.1`).
+            let unit_param = matches!(&t, Ty::Param(i, _)
+                if scope.params.get(*i as usize).is_some_and(|p| p.unit));
+            if (unit_param || matches!(t, Ty::Units(_)))
+                && node.parent().is_none_or(|p| p.kind() != K::TYPE_ARG)
+            {
+                let name = path.text().to_string();
+                diags.push(Diagnostic::error(
+                    Code::E0102,
+                    range,
+                    format!(
+                        "`{}` is a unit, not a type: a type with it is `f64[{}]`",
+                        name.trim(),
+                        name.trim()
+                    ),
+                ));
+                return Ty::Error;
+            }
+            // A unit as an argument: as a `Ty::Units`.
+            let t = match t {
+                Ty::Param(i, n) if unit_param => Ty::Units(UnitTy::atom(UnitAtom::Param(i, n))),
+                t => t,
+            };
+            // `f64[m/s]`: a quantity (`unit.type.1`).
+            match node.child(K::UNIT_SUFFIX) {
+                Some(suffix) => quantity_type(t, &suffix, range, scope, diags),
+                None => t,
+            }
         }
         ast::Type::Array(_) => {
             let elem = match node.children().find_map(ast::Type::cast) {
@@ -846,6 +947,11 @@ pub(crate) fn path_type(
                 Some(Def::Type(t)) => {
                     return alias_type(t, one, range, scope, diags);
                 }
+                // A unit, as a unit parameter's argument (`to_unit::<cm>`, `unit.param.2`).
+                Some(Def::Unit(u)) => {
+                    no_args(one, diags);
+                    return Ty::Units(UnitTy::atom(UnitAtom::Named(u, (*name).into())));
+                }
                 Some(Def::Trait(_)) => format!("`{name}` is a trait, not a type"),
                 Some(Def::Module(_)) => format!("`{name}` is a module, not a type"),
                 Some(_) => format!("`{name}` is not a type"),
@@ -907,6 +1013,11 @@ pub(crate) fn path_type(
                 }
                 Ok((Def::Type(t), n)) if n == segs.len() => {
                     alias_type(t, last, range, scope, diags)
+                }
+                Ok((Def::Unit(u), n)) if n == segs.len() => {
+                    no_args(last, diags);
+                    let name = names.join("::");
+                    Ty::Units(UnitTy::atom(UnitAtom::Named(u, name.as_str().into())))
                 }
                 Ok((Def::Adt(a), n)) if n + 1 == segs.len() => {
                     let base = &segs[n - 1];

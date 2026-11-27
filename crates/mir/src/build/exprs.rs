@@ -17,6 +17,11 @@ impl Builder<'_> {
     /// Evaluates `e` and stores its value in `dest`. A part of an `assert`'s condition is
     /// evaluated into its own local first, and marked as evaluated.
     pub(super) fn eval_into(&mut self, dest: Local, e: ExprId) {
+        // A value converted to another unit (`unit.conv.1`).
+        if let Some(conv) = self.unit_conv(e) {
+            self.eval_converted(dest, e, conv);
+            return;
+        }
         // An integer literal taken as a `Wrapping<T>` (`num.wrap.3`): the `T`, wrapped.
         if self.uncoerced != Some(e)
             && let Some(Ty::Adt(adt, ..)) = self.types.wrapped(e).cloned()
@@ -739,6 +744,36 @@ impl Builder<'_> {
                 }
                 self.cfg
                     .assign(dest, Rvalue::Aggregate(AggregateKind::Tuple, ops));
+            }
+            // A quantity's conversion (`unit.to.1`): its receiver's value, or rescaled.
+            ExprKind::MethodCall { receiver, args, .. }
+                if self.types.unit_passthrough(e).is_some()
+                    || self.types.unit_rescale(e).is_some() =>
+            {
+                self.unit_method(dest, e, receiver, &args);
+            }
+            // Text read as a quantity (`unit.parse.1`), by the prelude, with its units' table.
+            ExprKind::MethodCall { receiver, .. } if self.types.unit_parse(e).is_some() => {
+                let (table, int) = self.types.unit_parse(e).cloned().expect("checked");
+                let text = self.operand(receiver, &[]);
+                let table = Operand::Const(self.cfg.str_const(&table));
+                let func = if int {
+                    "__parse_quantity_int"
+                } else {
+                    "__parse_quantity_f64"
+                };
+                let callee = Callee::Fn {
+                    func: self.prelude_fn(func),
+                    args: Vec::new(),
+                };
+                let range = self.range(e);
+                self.call_into(
+                    Some(e),
+                    callee,
+                    Place::local(dest),
+                    vec![text, table],
+                    range,
+                );
             }
             // Through `Deref` (`expr.method.deref.1`): the receiver is what `deref` (or
             // `deref_mut`) gives.

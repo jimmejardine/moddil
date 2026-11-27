@@ -19,6 +19,7 @@ impl Collector<'_> {
             name: "Self".to_string(),
             range: name_range,
             konst: false,
+            unit: false,
             default: None,
         };
         let (params, _) = self.params(src, None, node.child(K::GENERIC_PARAMS), &[self_param]);

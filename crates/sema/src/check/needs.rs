@@ -11,7 +11,6 @@ use std::collections::HashMap;
 
 use moddil_syntax::TextRange;
 
-use crate::collect::item_tree;
 use crate::db::Program;
 use crate::hir::{ExprId, Handler};
 use crate::items::{Container, ItemTree, Vis};
@@ -148,7 +147,7 @@ const ROUNDS: usize = 64;
 /// Every function's effects and errors (`eff.infer.1`).
 #[salsa::tracked(returns(ref))]
 pub fn effects(db: &dyn Db, program: Program) -> Effects {
-    let items = item_tree(db, program);
+    let items = crate::typed_item_tree(db, program);
     let mut fx = Effects {
         fns: items
             .fns

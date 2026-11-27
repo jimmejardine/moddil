@@ -146,13 +146,13 @@ fn exact(k: Kind, bits: u128) -> Exact {
 }
 
 /// The value of integer kind `k` for `v`, if `v` is in its range.
-fn int_value(k: Kind, v: i128) -> Option<Value> {
+pub(crate) fn int_value(k: Kind, v: i128) -> Option<Value> {
     let (lo, hi) = k.range();
     (lo <= v && v <= hi).then(|| Value::Num(k, (v as u128) & mask(k)))
 }
 
 /// The value of float kind `k` nearest `v`.
-fn float_value(k: Kind, v: f64) -> Value {
+pub(crate) fn float_value(k: Kind, v: f64) -> Value {
     match k {
         Kind::F32 => Value::Num(k, u128::from((v as f32).to_bits())),
         _ => Value::Num(k, u128::from(v.to_bits())),
@@ -235,7 +235,11 @@ pub(crate) fn typed(v: Value, ty: Option<&moddil_syntax::ast::Type>) -> Value {
         }
     }
     let text = t.syntax().text().to_string();
-    let text = text.trim();
+    typed_text(v, text.trim())
+}
+
+/// `v` where the number type written `text` is (`f64`, `int`, `u8`): a literal of it.
+pub(crate) fn typed_text(v: Value, text: &str) -> Value {
     match (Kind::named(text), &v) {
         // A number of a narrower type widens (`num.widen.1`): exactly.
         (Some(k), Value::Num(j, _)) if *j != k => convert("checked_to", &v, Some(k)).unwrap_or(v),
@@ -572,6 +576,8 @@ fn fold_of(e: &moddil_syntax::ast::Expr) -> Option<Folded> {
     use moddil_syntax::SyntaxKind as K;
     use moddil_syntax::ast::{self, AstNode};
     match e {
+        // A unit literal's arithmetic is its unit's too (`unit.lit.1`).
+        ast::Expr::Literal(_) if e.syntax().child(K::UNIT_SUFFIX).is_some() => None,
         ast::Expr::Literal(_) => {
             let tok = e.syntax().child_tokens().find(|t| !t.kind().is_trivia())?;
             match tok.kind() {

@@ -1,0 +1,53 @@
+// covers: unit.decl.4, unit.conv.3
+
+dimension Length;
+dimension Time;
+dimension Temperature;
+
+unit m: Length;
+unit cm = m / 100;
+unit s: Time;
+unit K: Temperature;
+unit degC = K + 273.15;
+unit weird = furlong * 2;  //~ E0223
+unit hot = degC * 2;       //~ E0223
+
+fn added() -> f64[m] {
+    1.0[m] + 2.0[s]  //~ E0224
+}
+
+fn plain() -> f64[m] {
+    3.0  //~ E0224
+}
+
+fn inexact() -> int[m] {
+    150[cm]  //~ E0225
+}
+
+fn not_angle() -> f64 {
+    2.0[m].sin()  //~ E0227
+}
+
+fn log() -> f64 {
+    2.0[m].ln()  //~ E0227
+}
+
+fn bits() -> int[m] {
+    3[m] & 1[m]  //~ E0227
+}
+
+fn two_points() -> f64[degC] {
+    1.0[degC] + 2.0[degC]  //~ E0228
+}
+
+fn scaled_point() -> f64[degC] {
+    2.0 * 1.0[degC]  //~ E0228
+}
+
+fn no_number() -> bool[m] {  //~ E0229
+    true
+}
+
+fn unit_as_type() -> m {  //~ E0102
+    1.0
+}

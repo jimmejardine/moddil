@@ -261,6 +261,8 @@ impl Cx<'_> {
         Some(match inner {
             Ty::Bool => vec![Ctor::Bool(false), Ctor::Bool(true)],
             Ty::Refined(..) => return self.all_ctors(&self.items.base(inner), heads),
+            // A quantity is matched as its base (`unit.type.1`).
+            Ty::Quantity(b, _) => return self.all_ctors(b, heads),
             t @ (Ty::Int | Ty::Char) => split_ints(heads, 0, int_span(t)),
             t @ Ty::Num(n) if !n.is_float() => split_ints(heads, 0, int_span(t)),
             // A float is matched by bindings and `_` only.
@@ -321,7 +323,9 @@ impl Cx<'_> {
                 }
             }
             Ty::Never => Vec::new(),
-            Ty::Error | Ty::Ref(..) | Ty::Infer(_) | Ty::Errors(_) | Ty::Len(_) => return None,
+            Ty::Error | Ty::Ref(..) | Ty::Infer(_) | Ty::Errors(_) | Ty::Len(_) | Ty::Units(_) => {
+                return None;
+            }
         })
     }
 

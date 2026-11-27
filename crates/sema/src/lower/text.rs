@@ -604,16 +604,33 @@ impl Lowerer<'_> {
                     let at = TextRange::new(hole_start as u32, (hole_start + hole.len()) as u32);
                     // `{x:spec}`: `?` writes `x`'s `Debug` (`expr.fmt.debug.1`), and the rest
                     // pads and cuts it (`expr.fmt.spec.1`).
+                    // `{x:.2[mm]}`: a quantity written in a unit, then its name (`unit.fmt.1`).
+                    let mut unit = None;
                     let (expr_text, mut spec, names) = match spec_colon(&hole) {
-                        Some(k) => match parse_spec(&hole[k + 1..]) {
-                            Ok((spec, names)) => (&hole[..k], spec, (k + 1, names)),
-                            Err(why) => {
-                                self.report(Code::E0902, at, why);
-                                return false;
+                        Some(k) => {
+                            let mut text = &hole[k + 1..];
+                            if text.ends_with(']')
+                                && let Some(open) = text.rfind('[')
+                            {
+                                let name = text[open + 1..text.len() - 1].trim().to_string();
+                                match self.fmt_unit(&name, at) {
+                                    Some(u) => unit = Some((u, name)),
+                                    None => return false,
+                                }
+                                text = &text[..open];
                             }
-                        },
+                            match parse_spec(text) {
+                                Ok((spec, names)) => (&hole[..k], spec, (k + 1, names)),
+                                Err(why) => {
+                                    self.report(Code::E0902, at, why);
+                                    return false;
+                                }
+                            }
+                        }
                         None => (hole.as_str(), Spec::default(), (0, [None, None])),
                     };
+                    let unit_name = unit.as_ref().map(|(_, n)| format!(" {n}"));
+                    spec.unit = unit;
                     // A width or precision named `name$`: an expression where it stands.
                     let (from, [width, precision]) = names;
                     for (named, slot) in [(width, 0), (precision, 1)] {
@@ -630,6 +647,9 @@ impl Lowerer<'_> {
                     match self.hole(expr_text, hole_start, at) {
                         Some(e) => pieces.push(FmtPiece::Hole(e, spec)),
                         None => return false,
+                    }
+                    if let Some(n) = unit_name {
+                        lit_buf.push_str(&n);
                     }
                     let taken: usize = bytes[i..=end.min(bytes.len() - 1)]
                         .iter()
@@ -650,6 +670,29 @@ impl Lowerer<'_> {
 
     /// The expression of a hole (of `fmt`, or of a tag taking `&[&str]`) whose text starts at
     /// byte `at` of the file, parsed where it stands so its ranges are the file's.
+    /// The unit a format spec names, `mm` in `{x:[mm]}` (`unit.fmt.1`); reported at `range`
+    /// if it names none.
+    fn fmt_unit(&mut self, text: &str, range: TextRange) -> Option<crate::units::UnitTy> {
+        let parse = moddil_syntax::parse(&format!("fn f() -> f64[{text}] {{}}"));
+        let suffix = parse
+            .syntax()
+            .descendants()
+            .into_iter()
+            .find(|n| n.kind() == moddil_syntax::SyntaxKind::UNIT_SUFFIX);
+        let mut ds = Vec::new();
+        let unit = match (parse.errors().is_empty(), suffix) {
+            (true, Some(s)) => crate::resolve::resolve_unit(&s, &self.types, &mut ds),
+            _ => None,
+        };
+        if unit.is_none() {
+            let why = ds
+                .first()
+                .map_or_else(|| format!("`{text}` is not a unit"), |d| d.message.clone());
+            self.report(Code::E0223, range, why);
+        }
+        unit
+    }
+
     fn hole(&mut self, text: &str, at: usize, range: TextRange) -> Option<ExprId> {
         let wrapper = "fn f(){(";
         if at < wrapper.len() {

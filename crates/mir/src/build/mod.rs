@@ -24,6 +24,7 @@ mod patterns;
 mod places;
 mod scopes;
 mod select;
+mod units;
 
 use cfg::Cfg;
 use errors::{OnError, Target};
@@ -166,8 +167,18 @@ fn revealed<'a>(
     types: &'a Inference,
 ) -> std::borrow::Cow<'a, Inference> {
     let items = moddil_sema::item_tree(db, program);
-    if items.fns.iter().any(|f| matches!(f.ret, Ty::Opaque(_))) {
-        std::borrow::Cow::Owned(types.map_types(&mut |t| moddil_sema::reveal(db, program, t)))
+    let opaque = items.fns.iter().any(|f| matches!(f.ret, Ty::Opaque(_)));
+    // Units are erased (`unit.erase.1`): MIR's types have none.
+    let units = types.has_units();
+    if opaque || units {
+        std::borrow::Cow::Owned(types.map_types(&mut |t| {
+            let t = if opaque {
+                moddil_sema::reveal(db, program, t)
+            } else {
+                t.clone()
+            };
+            t.erase_units()
+        }))
     } else {
         std::borrow::Cow::Borrowed(types)
     }
@@ -312,6 +323,8 @@ struct Builder<'a> {
     /// The expression being evaluated before its conversion to a `dyn` borrow, which is not
     /// converted again.
     uncoerced: Option<ExprId>,
+    /// The expression being evaluated for its unit conversion (`unit.conv.1`), which it is not.
+    unconverted: Option<ExprId>,
     /// For each `#[selectable]` function a `select` here waits on: the types of its two parts,
     /// the closures that give its receiver and do the rest (`task.select.4`).
     selectables: HashMap<u32, (Ty, Ty)>,
@@ -352,6 +365,7 @@ impl<'a> Builder<'a> {
             evidence: HashMap::new(),
             installed: HashMap::new(),
             uncoerced: None,
+            unconverted: None,
             captured: HashMap::new(),
             in_closure: false,
         }

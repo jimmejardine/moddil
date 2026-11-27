@@ -45,6 +45,13 @@ pub struct ItemTree {
     pub adts: Vec<AdtDef>,
     /// The `type` items: aliases and refinements.
     pub types: Vec<TypeDef>,
+    /// The `dimension` items (`unit.dim.1`).
+    pub dimensions: Vec<DimensionDef>,
+    /// The `unit` items (`unit.decl.1`).
+    pub units: Vec<UnitDef>,
+    /// Whether a type the program's files write has a unit in it: if not, erasing units
+    /// (`unit.erase.1`) changes nothing.
+    pub has_quantities: bool,
     /// The traits.
     pub traits: Vec<TraitDef>,
     /// The impls.
@@ -93,6 +100,10 @@ pub enum Def {
     Variant(u32, u32),
     /// A module.
     Module(u32),
+    /// A `dimension` item (`unit.dim.1`).
+    Dimension(u32),
+    /// A `unit` item (`unit.decl.1`).
+    Unit(u32),
 }
 
 /// A name a module declares: its item, who can name it, and where it is declared.
@@ -168,6 +179,9 @@ pub struct GenericParam {
     /// Its default (`generic.default.1`), a type parameter of a trait, struct or enum only: the
     /// type an argument left out is, which may name the parameters before it and `Self`.
     pub default: Option<Ty>,
+    /// Whether it is a unit parameter (`unit.param.1`): one written in a unit (`f64[U]`), whose
+    /// arguments are units ([`Ty::Units`]) rather than types.
+    pub unit: bool,
 }
 
 /// The type parameters an item can name, and the bounds on them.
@@ -482,6 +496,57 @@ pub struct AdtDef {
     pub shown: Option<String>,
 }
 
+/// A `dimension` item (`unit.dim.1`): a base dimension (`dimension Length;`), or a name for a
+/// product of others (`dimension Velocity = Length / Time;`).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DimensionDef {
+    /// The name.
+    pub name: String,
+    /// Where the name is.
+    pub name_range: TextRange,
+    /// Which source it is in.
+    pub src: Src,
+    /// The module it is declared in.
+    pub module: u32,
+    /// Who can name it.
+    pub vis: Vis,
+    /// What it is a product of, the base dimensions to their powers: itself, for a base one.
+    pub dim: crate::units::Dim,
+}
+
+/// A `unit` item (`unit.decl.1`): a dimension's base unit (`unit m: Length;`), or one defined by
+/// others (`unit cm = m / 100;`, affine `unit degC = K + 273.15;`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnitDef {
+    /// The name.
+    pub name: String,
+    /// Where the name is.
+    pub name_range: TextRange,
+    /// Which source it is in.
+    pub src: Src,
+    /// The module it is declared in.
+    pub module: u32,
+    /// Who can name it.
+    pub vis: Vis,
+    /// Its dimension.
+    pub dim: crate::units::Dim,
+    /// How many of its dimension's base unit it is.
+    pub scale: crate::units::Scale,
+    /// For an affine unit (`unit.decl.3`): its zero, in the dimension's base unit (`degC`'s is
+    /// 273.15 K). A value `v` of it is `v · scale + offset` in the base unit.
+    pub offset: Option<crate::units::Scale>,
+}
+
+impl Eq for UnitDef {}
+
+impl std::hash::Hash for UnitDef {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        self.name.hash(h);
+        self.module.hash(h);
+        self.dim.hash(h);
+    }
+}
+
 /// A `type` item (`refine.1`): `type X = T;`, an alias, or `type X = T where p;`, a refinement.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TypeDef {
@@ -679,6 +744,8 @@ impl AdtDef {
 const LANG: &[&str] = &[
     "__Invariant",
     "Alloc",
+    "Angle",
+    "rad",
     "RadixText",
     "Runtime",
     "Option",
@@ -881,7 +948,7 @@ impl ItemTree {
             .get(name)?
             .def
         {
-            Def::Trait(t) | Def::Adt(t) => Some(t),
+            Def::Trait(t) | Def::Adt(t) | Def::Dimension(t) | Def::Unit(t) => Some(t),
             _ => None,
         }
     }
@@ -1183,9 +1250,11 @@ impl ItemTree {
                     _ => (0, a),
                 }
             }
+            Ty::Quantity(b, _) => self.size_of_depth(b, depth + 1),
             Ty::Str
             | Ty::Slice(_)
             | Ty::Len(_)
+            | Ty::Units(_)
             | Ty::Unit
             | Ty::Never
             | Ty::Error

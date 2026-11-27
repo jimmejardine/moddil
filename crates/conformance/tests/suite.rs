@@ -105,6 +105,7 @@ areas!(
     traits,
     tuples,
     types,
+    units,
     r#unsafe,
     views,
     wrappers,

@@ -19,6 +19,11 @@ impl Machine<'_> {
         let node = e.syntax();
         let range = node.text_range();
         match e {
+            // `100[cm]` (`unit.lit.1`).
+            ast::Expr::Literal(_) if node.child(K::UNIT_SUFFIX).is_some() => {
+                let unit = self.unit_of(&node.child(K::UNIT_SUFFIX).expect("a unit"));
+                Ok(crate::units::quantity(literal(node, false), unit))
+            }
             ast::Expr::Literal(_) => {
                 match node.child_tokens().find(|t| t.kind() == K::TAGGED_STRING) {
                     Some(tok) if tok.text().starts_with("fmt") => self.fmt(&tok),
@@ -1030,7 +1035,11 @@ impl Machine<'_> {
             && (lit.token(K::INTEGER).is_some() || lit.token(K::FLOAT).is_some())
         {
             // `-9223372036854775808` is one literal (`expr.lit.int.1`).
-            return Ok(literal(lit, true));
+            let v = literal(lit, true);
+            return Ok(match lit.child(K::UNIT_SUFFIX) {
+                Some(s) => crate::units::quantity(v, self.unit_of(&s)),
+                None => v,
+            });
         }
         if op.kind() == K::STAR {
             // What a borrow points to (`expr.deref.1`), or a box's value (`type.box.1`).
@@ -1038,6 +1047,12 @@ impl Machine<'_> {
             return Ok(self.memory.load(&p));
         }
         let v = self.eval(operand)?;
+        // A quantity's negation, of its unit (`unit.op.3`).
+        if let Value::Quantity(x, u) = self.read_through(v.clone()) {
+            let x = crate::num::unary(true, crate::units::settled(*x), range)
+                .or_else(|_| self.call_trait("Neg", "neg", vec![Value::Unit], range));
+            return Ok(Value::Quantity(Box::new(x?), u));
+        }
         match (op.kind(), self.read_through(v)) {
             (
                 k,
@@ -1091,6 +1106,17 @@ impl Machine<'_> {
                 let a = self.eval(&l)?;
                 let b = self.eval(&r)?;
                 let (a, b) = (self.read_through(a), self.read_through(b));
+                // Quantities (`unit.op.*`), in the unit a type gives a sum, if it does.
+                if matches!(a, Value::Quantity(..)) || matches!(b, Value::Quantity(..)) {
+                    let target = match self.sum_unit.take() {
+                        Some((at, u)) if at == range => Some((u, false)),
+                        other => {
+                            self.sum_unit = other;
+                            None
+                        }
+                    };
+                    return self.quantity_arith(k, op.text(), a, b, target, range);
+                }
                 // Numbers of a sized type, and the literals that meet them (`num.ops.1`).
                 if crate::num::is_num(&a, &b) {
                     return crate::num::arith(op.text(), a, b, range);
@@ -1167,6 +1193,8 @@ impl Machine<'_> {
         for (op, x) in rest {
             let cur = self.compared(x)?;
             let (a, b) = (self.memory.load(&prev), self.memory.load(&cur));
+            // Quantities compare in one unit (`unit.op.add.1`).
+            let (a, b) = self.compared_numbers(a, b, range)?;
             let texts = (text::text_of(self, &a), text::text_of(self, &b));
             let holds = match (&a, &b) {
                 // Numbers by their type's order; a float is unordered with NaN.
@@ -1238,10 +1266,17 @@ impl Machine<'_> {
             let v = self.eval(&value)?;
             let p = self.place(&target)?;
             let old = self.memory.load(&p);
-            // A literal stored where a number of a sized type was takes its type.
-            let v = match &old {
-                Value::Num(k, _) => crate::num::as_kind(v, *k),
-                _ => v,
+            // A literal stored where a number of a sized type was takes its type; a quantity
+            // stored where one was, its unit (`unit.conv.1`).
+            let v = match (&old, v) {
+                (Value::Num(k, _), v) => crate::num::as_kind(v, *k),
+                (Value::Quantity(_, u), Value::Quantity(x, w)) if u != &w => {
+                    let point = crate::units::affine(self.program, u)
+                        || crate::units::affine(self.program, &w);
+                    let x = crate::units::convert(self.program, *x, &w, u, point, range)?;
+                    Value::Quantity(Box::new(x), u.clone())
+                }
+                (_, v) => v,
             };
             self.memory.store(&p, Value::Moved);
             self.drop_value(old, true, range)?;
@@ -1251,7 +1286,29 @@ impl Machine<'_> {
             let old = self.memory.load(&p);
             let v = self.eval(&value)?;
             let v = self.read_through(v);
-            let new = if crate::num::is_num(&old, &v) {
+            let new = if let Value::Quantity(_, u) = &old {
+                // A quantity keeps its unit: what is added, converted to it (`unit.op.add.1`).
+                let u = (**u).clone();
+                let k = compound(op.kind());
+                let sym = op.text().to_string();
+                let r = self.quantity_arith(
+                    k,
+                    &sym[..sym.len() - 1],
+                    old,
+                    v,
+                    Some((u.clone(), true)),
+                    range,
+                )?;
+                match r {
+                    Value::Quantity(x, w)
+                        if *w != u && crate::units::same_dim(self.program, &w, &u) =>
+                    {
+                        let x = crate::units::convert(self.program, *x, &w, &u, false, range)?;
+                        Value::Quantity(Box::new(x), std::sync::Arc::new(u))
+                    }
+                    r => r,
+                }
+            } else if crate::num::is_num(&old, &v) {
                 let sym = op.text();
                 crate::num::arith(&sym[..sym.len() - 1], old, v, range)?
             } else if let Value::Adt { .. } = old {
@@ -1279,6 +1336,7 @@ impl Machine<'_> {
 fn literal_tree(e: &ast::Expr) -> bool {
     let node = e.syntax();
     match e {
+        ast::Expr::Literal(_) if node.child(K::UNIT_SUFFIX).is_some() => false,
         ast::Expr::Literal(_) => node.child_tokens().any(|t| t.kind() == K::INTEGER),
         ast::Expr::Paren(_) | ast::Expr::Prefix(_) => {
             let op_ok = node

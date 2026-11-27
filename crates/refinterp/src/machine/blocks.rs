@@ -135,8 +135,25 @@ impl Machine<'_> {
             self.bind(binds);
             return Ok(());
         };
+        // A sum given a unit by the type written takes it (`unit.op.add.1`).
+        if let Some(t) = l.ty()
+            && let Some((_, unit)) = self.type_unit(&t)
+            && let ast::Expr::Bin(_) = &init
+            && init
+                .syntax()
+                .child_tokens()
+                .any(|t| matches!(t.kind(), K::PLUS | K::MINUS))
+        {
+            self.sum_unit = Some((init.syntax().text_range(), unit));
+        }
         // A literal takes the number type written (`num.lit.1`).
         let src = match l.ty() {
+            // A quantity, in the unit written (`unit.conv.1`).
+            Some(t) if t.syntax().child(K::UNIT_SUFFIX).is_some() => {
+                let v = self.eval(&init)?;
+                let v = self.typed(v, Some(&t));
+                Src::Place(self.memory.temp(v), false)
+            }
             Some(t)
                 if {
                     let n = t.syntax().text().to_string();

@@ -1,0 +1,54 @@
+// covers: unit.param.1, unit.param.2, unit.type.3
+
+dimension Length;
+dimension Time;
+
+unit m: Length;
+unit cm = m / 100;
+unit s: Time;
+
+fn sqr<U>(x: f64[U]) -> f64[U^2] {
+    x * x
+}
+
+fn mean<U>(xs: &[f64[U]]) -> f64[U] {
+    let mut total = xs[0];
+    let mut i = 1;
+    while i < xs.len() {
+        total = total + xs[i];
+        i += 1;
+    }
+    total / 2.0
+}
+
+fn per<U, V>(a: f64[U], b: f64[V]) -> f64[U/V] {
+    a / b
+}
+
+test "a unit parameter is the argument's unit" {
+    let a: f64[m^2] = sqr(3.0[m]);
+    a  // => 9.0
+    ;
+    let b: f64[cm^2] = sqr(2.0[cm]);
+    b  // => 4.0
+}
+
+test "a plain number is a unit parameter's one" {
+    sqr(4.0)  // => 16.0
+}
+
+test "a slice of quantities" {
+    let xs: [f64[m]; 2] = [1.0[m], 3.0[m]];
+    mean(&xs)  // => 2.0
+}
+
+test "two unit parameters" {
+    let v: f64[m/s] = per(10.0[m], 2.0[s]);
+    v  // => 5.0
+}
+
+test "a unit given explicitly" {
+    let x = 1.5.with_unit::<m>();
+    let y: f64[cm] = x;
+    y  // => 150.0
+}

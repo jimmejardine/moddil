@@ -24,7 +24,7 @@ and a code never changes meaning.
 | E0001 | Syntax error | [syntax.grammar.1](syntax.md) |
 | E0002 | A comparison chain in more than one direction | [expr.cmp.chain.2](expressions/comparison.md) |
 | E0101 | Unresolved name | [names.resolve.1](names.md) |
-| E0102 | Unresolved type, or a const parameter where a type is expected | [names.type.1](names.md), [generic.const.2](generics.md) |
+| E0102 | Unresolved type, or a const parameter or a unit where a type is expected | [names.type.1](names.md), [generic.const.2](generics.md), [unit.decl.4](units.md) |
 | E0103 | Duplicate definition, or an item with the name of an import | [names.item.1](names.md), [names.item.2](names.md), [mod.names.1](modules.md) |
 | E0104 | Duplicate parameter | [item.fn.params.1](items/functions.md) |
 | E0105 | A name not bound in every alternative of `\|` | [pat.or.1](patterns.md) |
@@ -58,6 +58,13 @@ and a code never changes meaning.
 | E0220 | `core::os` or `core::gpu` named in a mod without the `os` capability | [os.cap.1](os.md), [gpu.cap.1](gpu.md) |
 | E0221 | A `#[kernel]` that is not `fn k(params: &P, out: &mut Tile)`, or that needs handlers, can fail, suspends or spawns, or holds what a GPU does not have | [gpu.kernel.1](gpu.md), [gpu.kernel.2](gpu.md) |
 | E0222 | A C or `#[export]` function with a type C does not have, or with effects, errors or suspension; an `extern` block that is not `extern "C"`; a C function with a body; an `on_trap` that is not one of the result's integers | [ffi.types.1](interop.md), [ffi.extern.1](interop.md), [ffi.export.1](interop.md), [ffi.export.3](interop.md) |
+| E0223 | A `unit` or `dimension` item, or a unit, that is malformed: a name that is no unit or dimension, a definition in terms of itself, an affine unit inside another | [unit.decl.2](units.md), [unit.decl.3](units.md) |
+| E0224 | Quantities of different dimensions where one is needed | [unit.conv.3](units.md), [unit.op.add.1](units.md) |
+| E0225 | An integer quantity converted to a unit it is not a whole number of | [unit.conv.1](units.md) |
+| E0226 | A unit conversion of a type without built-in arithmetic | [unit.conv.3](units.md) |
+| E0227 | An operation a quantity does not have | [unit.op.3](units.md), [unit.method.1](units.md) |
+| E0228 | A point of an affine unit added to a point, multiplied or divided | [unit.affine.1](units.md) |
+| E0229 | A unit on a type that is not a number | [unit.type.1](units.md) |
 | E0301 | Mutation of an immutable local (assigning, or borrowing with `&mut`; a `let x;` assigned again) | [expr.assign.1](expressions/assignment.md), [borrow.mut.1](borrows.md), [stmt.let.uninit.1](statements.md) |
 | E0302 | Mutation through a shared borrow | [borrow.mut.1](borrows.md) |
 | E0303 | Use of a moved value, or of a `let x;` not yet assigned | [own.move.1](ownership.md), [own.move.partial.1](ownership.md), [stmt.let.uninit.1](statements.md) |

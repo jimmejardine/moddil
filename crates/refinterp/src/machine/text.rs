@@ -139,6 +139,12 @@ impl Machine<'_> {
     /// (`num.lit.1`), and a `&String` where a `&str` is written is its text
     /// (`text.coerce.1`), as the prelude's `as_str` gives it.
     pub(super) fn typed(&mut self, v: Value, ty: Option<&ast::Type>) -> Value {
+        // A number where a type with a unit is written: in that unit (`unit.conv.1`).
+        if let Some(t) = ty
+            && t.syntax().child(K::UNIT_SUFFIX).is_some()
+        {
+            return self.typed_quantity(v.clone(), t).unwrap_or(v);
+        }
         if let Some(t) = ty
             && t.syntax().text() == "&str"
             && let Value::Ref(..) = v
@@ -405,9 +411,18 @@ impl Machine<'_> {
         out: &crate::value::Pointer,
         straight: bool,
     ) -> Eval<()> {
+        // `{x:[mm]}`: a quantity written in a unit, then the unit's name (`unit.fmt.1`).
+        let mut unit = None;
         let (text, spec) = match spec_colon(text) {
             Some(k) => {
-                let mut spec = parse_spec(&text[k + 1..]).expect("a checked spec");
+                let mut spec_text = &text[k + 1..];
+                if spec_text.ends_with(']')
+                    && let Some(open) = spec_text.rfind('[')
+                {
+                    unit = Some(spec_text[open + 1..spec_text.len() - 1].trim().to_string());
+                    spec_text = &spec_text[..open];
+                }
+                let mut spec = parse_spec(spec_text).expect("a checked spec");
                 // A width or precision named `name$`, evaluated where it stands.
                 for (named, precision) in [
                     (spec.width_name.take(), false),
@@ -441,13 +456,46 @@ impl Machine<'_> {
             },
         };
         let range = expr.syntax().text_range();
+        // A quantity is written as its number, in the unit named if one is.
+        let this = match self.target(this.clone()) {
+            Value::Quantity(x, from) => {
+                let x = match &unit {
+                    Some(name) => {
+                        let to = self.unit_named_text(name);
+                        let point = crate::units::affine(self.program, &from)
+                            || crate::units::affine(self.program, &to);
+                        crate::units::convert(self.program, *x, &from, &to, point, range)?
+                    }
+                    None => crate::units::settled(*x),
+                };
+                Value::Ref(self.memory.temp(x), false)
+            }
+            _ => this,
+        };
+        let suffix = unit.map(|n| format!(" {n}"));
+        self.hole_value(&spec, this, out, range, straight)?;
+        if let Some(s) = suffix {
+            self.push_text(out, &s)?;
+        }
+        Ok(())
+    }
+
+    /// A hole's value `this` written onto `out` as `spec` says.
+    fn hole_value(
+        &mut self,
+        spec: &Spec,
+        this: Value,
+        out: &crate::value::Pointer,
+        range: moddil_syntax::TextRange,
+        straight: bool,
+    ) -> Eval<()> {
         if spec.width.is_none()
             && spec.precision.is_none()
             && !spec.plus
             && spec.radix.is_none()
             && spec.exponent.is_none()
         {
-            self.write_value(&spec, this, out, range)?;
+            self.write_value(spec, this, out, range)?;
             return Ok(());
         }
         let value = self.target(this.clone());
@@ -487,13 +535,13 @@ impl Machine<'_> {
             _ => {
                 let empty = self.string_call("new", Vec::new(), range)?;
                 let piece = self.memory.temp(empty);
-                self.write_value(&spec, this, &piece, range)?;
+                self.write_value(spec, this, &piece, range)?;
                 crate::value::string_text(&self.memory.load(&piece)).expect("a `String`")
             }
         };
         // `+` before a number with no `-` (`expr.fmt.spec.4`).
         if straight {
-            return self.padded_onto(out, &written, &spec, number, text_value, range);
+            return self.padded_onto(out, &written, spec, number, text_value, range);
         }
         let written = if spec.plus && !written.starts_with('-') {
             format!("+{written}")

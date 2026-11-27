@@ -64,7 +64,7 @@ pub(crate) fn complete(
     let context = &before[..start];
     let mut out = if let Some(path) = context.strip_suffix("::") {
         let segs: Vec<&str> = trailing_path(path);
-        let items = moddil_sema::item_tree(db, program);
+        let items = moddil_sema::typed_item_tree(db, program);
         path_members(items, module_of(items, file), &segs)
     } else {
         // Analyse with the placeholder where the name being typed is.
@@ -120,7 +120,7 @@ fn placeholder_expr(
     file: u32,
     at: u32,
 ) -> Option<(Owner<'_>, moddil_sema::hir::ExprId)> {
-    let items = moddil_sema::item_tree(db, program);
+    let items = moddil_sema::typed_item_tree(db, program);
     let fns = items
         .fns
         .iter()
@@ -159,7 +159,7 @@ fn members(db: &Database, program: Program, file: u32, at: u32) -> Vec<Completio
         ExprKind::Field { base, .. } | ExprKind::MethodCall { receiver: base, .. } => *base,
         _ => return Vec::new(),
     };
-    let items = moddil_sema::item_tree(db, program);
+    let items = moddil_sema::typed_item_tree(db, program);
     type_members(
         db,
         program,
@@ -275,6 +275,14 @@ fn of_def(db: &Database, program: Program, items: &ItemTree, name: &str, def: De
             CompletionKind::Module,
             format!("mod {}", items.module_path(m)),
         ),
+        Def::Dimension(d) => (
+            CompletionKind::Type,
+            format!("dimension {}", items.dimensions[d as usize].name),
+        ),
+        Def::Unit(u) => (
+            CompletionKind::Type,
+            format!("unit {}", items.units[u as usize].name),
+        ),
     };
     Completion {
         label: name.to_string(),
@@ -375,7 +383,7 @@ fn path_members(items: &ItemTree, from: u32, segs: &[&str]) -> Vec<Completion> {
                 ));
             }
         }
-        Def::Fn(_) | Def::Type(_) | Def::Variant(..) => {}
+        Def::Fn(_) | Def::Type(_) | Def::Variant(..) | Def::Dimension(_) | Def::Unit(_) => {}
     }
     out
 }
@@ -383,7 +391,7 @@ fn path_members(items: &ItemTree, from: u32, segs: &[&str]) -> Vec<Completion> {
 fn kind_of(def: Def) -> CompletionKind {
     match def {
         Def::Fn(_) => CompletionKind::Function,
-        Def::Adt(_) | Def::Type(_) => CompletionKind::Type,
+        Def::Adt(_) | Def::Type(_) | Def::Dimension(_) | Def::Unit(_) => CompletionKind::Type,
         Def::Trait(_) => CompletionKind::Trait,
         Def::Variant(..) => CompletionKind::Variant,
         Def::Module(_) => CompletionKind::Module,
@@ -393,7 +401,7 @@ fn kind_of(def: Def) -> CompletionKind {
 /// The names in scope at the placeholder at `at`: the locals whose scope holds it, the innermost
 /// of each name, then the module's names and the prelude's.
 fn scope(db: &Database, program: Program, file: u32, at: u32) -> Vec<Completion> {
-    let items = moddil_sema::item_tree(db, program);
+    let items = moddil_sema::typed_item_tree(db, program);
     let from = module_of(items, file);
     let mut out = Vec::new();
     if let Some((owner, _)) = placeholder_expr(db, program, file, at) {

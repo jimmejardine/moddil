@@ -135,6 +135,25 @@ codes! {
     /// A C function or an `#[export]` with a type C does not have, or with effects, errors or
     /// suspension; an `extern` block that is not `extern "C"`; a C function with a body.
     E0222 = "invalid C function or export",
+    /// A `dimension` or `unit` item, or a unit, that is malformed: a name that is no dimension
+    /// or unit, a definition in terms of itself, an affine unit inside another (`unit.decl.1`).
+    E0223 = "invalid unit or dimension",
+    /// Quantities of different dimensions where one dimension is needed: added, compared,
+    /// converted (`unit.conv.3`).
+    E0224 = "mismatched dimensions",
+    /// An integer quantity converted to a unit its value is not a whole number of
+    /// (`unit.conv.1`): `to_unit` with a rounding mode says how.
+    E0225 = "inexact integer unit conversion",
+    /// A conversion between units of a type with no built-in arithmetic (`unit.conv.3`).
+    E0226 = "unit conversion of a non-number",
+    /// An operation a quantity does not have: `ln` of a length, `sin` of what is not an angle,
+    /// bitwise operators (`unit.method.1`).
+    E0227 = "operation not defined on a quantity",
+    /// An affine unit used where only a difference is meaningful: two points added, a point
+    /// multiplied (`unit.affine.1`).
+    E0228 = "invalid use of an affine unit",
+    /// A unit on a type that is not a number (`unit.type.1`).
+    E0229 = "unit on a type that is not a number",
     /// An assignment to, or a `&mut` borrow of, a local not declared `mut`.
     E0301 = "mutation of an immutable local",
     /// An assignment through, or a `&mut` borrow through, a shared borrow.

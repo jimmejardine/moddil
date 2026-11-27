@@ -30,6 +30,7 @@ pub(crate) use tags::wrapper_names;
 
 pub(crate) use sigs::error_type;
 mod traits;
+pub(crate) mod units;
 
 use report::Reporter;
 
@@ -197,14 +198,34 @@ pub(crate) fn simple_binding(
     }
 }
 
-/// The program's items, the prelude's, and the derived impls, with their signatures resolved.
+/// The program's items, the prelude's, and the derived impls, with their signatures resolved,
+/// and their units (`unit.type.1`): what checking sees.
 #[salsa::tracked(returns(ref))]
-pub fn item_tree(db: &dyn Db, program: Program) -> ItemTree {
+pub fn typed_item_tree(db: &dyn Db, program: Program) -> ItemTree {
     let (expansion, dparse) = derived(db, program);
     let mut tree = collect(db, program, expansion, dparse);
     tree.diagnostics
         .extend(tags::tag_items(db, program).diagnostics.iter().cloned());
+    tree.has_quantities = tree.any_units();
     tree
+}
+
+/// The program's items with their units erased (`unit.erase.1`).
+#[salsa::tracked(returns(ref))]
+fn erased_item_tree(db: &dyn Db, program: Program) -> ItemTree {
+    typed_item_tree(db, program).erase_units()
+}
+
+/// The program's items, the prelude's, and the derived impls, with their signatures resolved
+/// and their units erased (`unit.erase.1`): what MIR and the implementations see. The same as
+/// [`typed_item_tree`] for a program whose items have no units.
+pub fn item_tree(db: &dyn Db, program: Program) -> &ItemTree {
+    let typed = typed_item_tree(db, program);
+    if typed.has_quantities {
+        erased_item_tree(db, program)
+    } else {
+        typed
+    }
 }
 
 /// The tree without the tagged literals' hidden items, which come from it
@@ -255,6 +276,9 @@ struct Nodes {
     traits: Vec<Site>,
     impls: Vec<Site>,
     fns: Vec<Site>,
+    /// The `dimension` and `unit` items (`unit.dim.1`, `unit.decl.1`).
+    dims: Vec<Site>,
+    units: Vec<Site>,
     /// Each test: its file, its module, its node, and for an example in a doc comment
     /// (`test.doc.1`), the test's name.
     tests: Vec<(u32, u32, SyntaxNode, Option<String>)>,
@@ -555,6 +579,8 @@ impl Collector<'_> {
                         }
                     }
                     K::TYPE_ITEM => nodes.types.push((*src, module, node)),
+                    K::DIMENSION_ITEM => nodes.dims.push((*src, module, node)),
+                    K::UNIT_ITEM => nodes.units.push((*src, module, node)),
                     K::TEST_ITEM if src.is_file() => {
                         nodes
                             .tests
@@ -606,6 +632,9 @@ impl Collector<'_> {
             self.enter(*src, *module);
             self.type_skeleton(*src, node);
         }
+        // The dimensions and units, which types name, before any type is resolved.
+        let mut unit_items = self.unit_skeletons(&nodes.dims, &nodes.units);
+        self.unit_defs(&mut unit_items);
         let first_free = self.free_fns(&nodes.fns);
         self.const_values(first_free, &nodes.fns);
         for (k, (src, module, node)) in nodes.fns.iter().enumerate() {
@@ -894,11 +923,14 @@ impl Collector<'_> {
                             ));
                         }
                         bounded.push((params.len(), p.clone()));
+                        // One the item writes in a unit is a unit parameter (`unit.param.1`).
+                        let unit = g.parent().is_some_and(|o| units::names_in_units(&o, &name));
                         params.push(GenericParam {
                             name,
                             range,
                             konst: false,
                             default: None,
+                            unit,
                         });
                     }
                     // `const N: int` (`generic.const.1`): its arguments are lengths.
@@ -934,6 +966,7 @@ impl Collector<'_> {
                             range,
                             konst: true,
                             default: None,
+                            unit: false,
                         });
                     }
                     _ => {}

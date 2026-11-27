@@ -3,6 +3,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use crate::units::{UnitAtom, UnitTy};
+
 /// A type: the built-in scalars, tuples, borrows, structs and enums with their type arguments,
 /// type parameters and associated types.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -73,6 +75,12 @@ pub enum Ty {
     /// error of a `Result` or of a `fail(…)` that can be any of them (`A | B`). Make one with
     /// [`Ty::errors`].
     Errors(Arc<[Ty]>),
+    /// A quantity (`unit.type.1`): a number type with a unit, `f64[m/s]`. Its unit is never one
+    /// (a dimensionless quantity is its base), and its base is never a quantity. Make one with
+    /// [`Ty::quantity`]. Units are erased before MIR: there, it is its base.
+    Quantity(Arc<Ty>, UnitTy),
+    /// A unit as the argument of a unit parameter (`unit.param.1`): `cm` in `to_unit::<cm>`.
+    Units(UnitTy),
     /// A type being inferred, by its index in the checker's table (or [`Ty::HOLE`] in HIR: a
     /// type left for inference, such as the arguments of `Pair::new`).
     Infer(u32),
@@ -380,6 +388,8 @@ impl Ty {
             }
             Ty::Assoc(a) => a.self_ty.any(f) || a.trait_ref.args.iter().any(|t| t.any(f)),
             Ty::Opaque(o) => o.args.iter().any(|t| t.any(f)),
+            Ty::Quantity(b, u) => b.any(f) || unit_any(u, f),
+            Ty::Units(u) => unit_any(u, f),
             _ => false,
         }
     }
@@ -418,7 +428,47 @@ impl Ty {
                 index: a.index,
                 name: a.name.clone(),
             })),
+            Ty::Quantity(b, u) => {
+                let b = f(b);
+                Ty::quantity(b, unit_map(u, f))
+            }
+            Ty::Units(u) => Ty::Units(unit_map(u, f)),
             t => t.clone(),
+        }
+    }
+
+    /// The quantity of `base` in `unit` (`unit.type.2`): `base` itself if `unit` is one, and
+    /// `base`'s own unit times `unit` if it is a quantity.
+    pub fn quantity(base: Ty, unit: UnitTy) -> Ty {
+        match base {
+            Ty::Quantity(b, u) => Ty::quantity((*b).clone(), u.mul(&unit)),
+            b if unit.is_one() => b,
+            b => Ty::Quantity(Arc::new(b), unit),
+        }
+    }
+
+    /// A quantity's base and unit; any other type, with unit one.
+    pub fn split_unit(&self) -> (Ty, UnitTy) {
+        match self {
+            Ty::Quantity(b, u) => ((**b).clone(), u.clone()),
+            t => (t.clone(), UnitTy::one()),
+        }
+    }
+
+    /// Whether the type is or contains a quantity or a unit, which erasure removes.
+    pub fn has_units(&self) -> bool {
+        self.any(&|t| matches!(t, Ty::Quantity(..) | Ty::Units(_)))
+    }
+
+    /// The type with its units erased (`unit.erase.1`): each quantity is its base, and each unit
+    /// argument `()`.
+    #[must_use]
+    pub fn erase_units(&self) -> Ty {
+        match self {
+            Ty::Quantity(b, _) => b.erase_units(),
+            Ty::Units(_) => Ty::Unit,
+            t if !t.has_units() => t.clone(),
+            t => t.map(&mut |x| x.erase_units()),
         }
     }
 
@@ -547,6 +597,35 @@ impl Ty {
     }
 }
 
+/// Whether `f` holds for a unit parameter or variable in `u`, as a type.
+fn unit_any(u: &UnitTy, f: &impl Fn(&Ty) -> bool) -> bool {
+    u.parts().iter().any(|(a, _)| match a {
+        UnitAtom::Param(i, n) => f(&Ty::Param(*i, n.clone())),
+        UnitAtom::Infer(v) => f(&Ty::Infer(*v)),
+        UnitAtom::Named(..) => false,
+    })
+}
+
+/// `u` with `f` applied to each unit parameter and variable in it, as a type: what `f` gives for
+/// one is the unit (a [`Ty::Units`]), parameter or variable it stands for; anything else (an
+/// error, or a variable nothing bound) drops it.
+fn unit_map(u: &UnitTy, f: &mut impl FnMut(&Ty) -> Ty) -> UnitTy {
+    u.replace(&mut |a| {
+        let t = match a {
+            UnitAtom::Param(i, n) => Ty::Param(*i, n.clone()),
+            UnitAtom::Infer(v) => Ty::Infer(*v),
+            UnitAtom::Named(..) => return None,
+        };
+        match f(&t) {
+            Ty::Units(w) => Some(w),
+            Ty::Param(i, n) => Some(UnitTy::atom(UnitAtom::Param(i, n))),
+            Ty::Infer(v) => Some(UnitTy::atom(UnitAtom::Infer(v))),
+            Ty::Error | Ty::Unit => Some(UnitTy::one()),
+            _ => None,
+        }
+    })
+}
+
 fn list(f: &mut fmt::Formatter<'_>, ts: &[Ty]) -> fmt::Result {
     for (i, t) in ts.iter().enumerate() {
         if i > 0 {
@@ -625,6 +704,8 @@ impl fmt::Debug for Ty {
                 }
                 f.write_str(")")
             }
+            Ty::Quantity(b, u) => write!(f, "{b:?}[{u:?}]"),
+            Ty::Units(u) => write!(f, "{u:?}"),
         }
     }
 }
