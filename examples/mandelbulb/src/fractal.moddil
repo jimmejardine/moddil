@@ -7,7 +7,8 @@ use mod::vec3::Vec3;
 pub struct Params {
     /// The exponent; 8 gives the classic bulb.
     pub power: f32,
-    /// More iterations give finer detail, at a higher cost per step.
+    /// More iterations give finer detail, at a higher cost per step: 24 shows the shape's real
+    /// structure close to the surface, where 12 shows contour bands.
     pub iterations: int,
     /// A point whose orbit leaves this radius has escaped.
     pub bailout: f32,
@@ -15,7 +16,7 @@ pub struct Params {
 
 impl Params {
     pub fn classic() -> Params {
-        Params { power: 8.0, iterations: 12, bailout: 2.0 }
+        Params { power: 8.0, iterations: 24, bailout: 2.0 }
     }
 }
 
@@ -118,7 +119,7 @@ pub fn normal(p: Vec3, params: Params, eps: f32) -> Vec3 {
 test "the power-8 step by doubled angles agrees with the trigonometric one" {
     // A power just off 8 takes the trigonometric path.
     let eight = Params::classic();
-    let near = Params { power: 7.99999, iterations: 12, bailout: 2.0 };
+    let near = Params { power: 7.99999, iterations: 24, bailout: 2.0 };
     let p = Vec3::new(0.7, -0.4, 0.5);
     let a = distance(p, eight);
     let b = distance(p, near);
